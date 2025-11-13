@@ -399,7 +399,6 @@
         };
 
         // --- CẤU HÌNH DISCORD WEBHOOK ---
-        // Đã dán Webhook URL:
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
 
         // Khởi tạo Firebase và các dịch vụ
@@ -411,13 +410,13 @@
         // --- CÁC BIẾN TOÀN CỤC ---
         let currentPage = 1;
         const rowsPerPage = 10;
-        let allRowsData = []; // Lưu trữ toàn bộ dữ liệu Lot (từ Firestore)
-        let filteredRowsData = []; // Lưu trữ dữ liệu Lot đã lọc
+        let allRowsData = [];
+        let filteredRowsData = [];
+        let lotCheckerInterval; // Biến lưu trữ Interval
 
         // --- CÁC HÀM XỬ LÝ ĐĂNG NHẬP FIREBASE AUTH ---
 
         async function login() {
-            // Lấy giá trị từ Tên đăng nhập
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const errorMessage = document.getElementById('error-message');
@@ -428,7 +427,6 @@
                 return;
             }
 
-            // Chuyển Tên đăng nhập thành định dạng Email hợp lệ: [username]@lot-priority-app-shared.com
             const loginEmail = `${username}@lot-priority-app-shared.com`;
 
             try {
@@ -441,6 +439,11 @@
 
         function logout() {
             auth.signOut();
+            // Dừng Interval khi đăng xuất
+            if (lotCheckerInterval) {
+                clearInterval(lotCheckerInterval);
+                lotCheckerInterval = null;
+            }
         }
 
         // Theo dõi trạng thái đăng nhập của Firebase
@@ -449,24 +452,72 @@
             const mainContent = document.getElementById('main-content');
 
             if (user) {
-                // Đã đăng nhập
                 loginContainer.style.display = 'none';
                 mainContent.style.display = 'block';
                 document.getElementById('username').value = '';
                 document.getElementById('password').value = '';
+
                 // Lắng nghe dữ liệu realtime từ Firestore
                 listenForLots();
+
+                // BẮT ĐẦU CHẾ ĐỘ TỰ ĐỘNG KIỂM TRA MỖI PHÚT
+                if (!lotCheckerInterval) {
+                    lotCheckerInterval = setInterval(checkAndCompleteLots, 120000); // Chạy mỗi 60 giây (1 phút)
+                    console.log("Bắt đầu tự động kiểm tra Lot.");
+                }
             } else {
-                // Chưa đăng nhập/Đăng xuất
                 loginContainer.style.display = 'block';
                 mainContent.style.display = 'none';
                 document.getElementById('error-message').textContent = '';
+
+                // Dừng Interval khi đăng xuất
+                if (lotCheckerInterval) {
+                    clearInterval(lotCheckerInterval);
+                    lotCheckerInterval = null;
+                    console.log("Đã dừng tự động kiểm tra Lot.");
+                }
             }
         });
 
-        // --- HÀM GỬI THÔNG BÁO DISCORD (Tối giản) ---
+        // --- HÀM TỰ ĐỘNG KIỂM TRA VÀ CẬP NHẬT TRẠNG THÁI (MỚI) ---
+        async function checkAndCompleteLots() {
+            // Lấy thời gian hiện tại
+            const now = new Date();
+            let completedCount = 0;
+
+            // Lọc các Lot có trạng thái 'Đang nung' VÀ có thời gian nung xong
+            const runningLots = allRowsData.filter(lot => lot.status === 'Đang nung' && lot.time);
+
+            const batch = db.batch();
+
+            runningLots.forEach(lot => {
+                // Chuyển thời gian nung xong từ chuỗi datetime-local sang đối tượng Date
+                const finishTime = new Date(lot.time);
+
+                // So sánh: Nếu thời gian nung xong <= thời gian hiện tại
+                if (finishTime <= now) {
+                    const lotRef = lotsCollection.doc(lot.id);
+                    // Cập nhật trạng thái thành "Hoàn thành"
+                    batch.update(lotRef, {
+                        status: 'Hoàn thành'
+                    });
+                    completedCount++;
+                }
+            });
+
+            if (completedCount > 0) {
+                try {
+                    await batch.commit();
+                    console.log(`Tự động hoàn thành ${completedCount} Lot.`);
+                    // Listener sẽ tự động tải lại dữ liệu và giao diện
+                } catch (error) {
+                    console.error("Lỗi khi tự động cập nhật trạng thái Lot:", error);
+                }
+            }
+        }
+
+        // --- HÀM GỬI THÔNG BÁO DISCORD ---
         async function sendDiscordNotification(count, newProcess) {
-            // Kiểm tra xem Webhook URL có hợp lệ không (chỉ cần kiểm tra chuỗi token)
             if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("YOUR_WEBHOOK_ID")) {
                 console.warn("LƯU Ý: Webhook URL chưa được cài đặt hoặc không hợp lệ. Không thể gửi thông báo Discord.");
                 return;
@@ -490,7 +541,6 @@
                     console.log("Gửi thông báo Discord thành công.");
                 } else {
                     console.error("Lỗi khi gửi thông báo Discord:", response.status, response.statusText);
-                    // Có thể thêm một cảnh báo trên giao diện người dùng nếu cần thiết
                 }
 
             } catch (error) {
@@ -498,12 +548,12 @@
             }
         }
 
-        // --- CÁC HÀM XỬ LÝ FIREBASE FIRESTORE (CRUD & Realtime) ---
+        // --- CÁC HÀM XỬ LÝ FIRESTORE (CRUD & Realtime) VÀ HIỂN THỊ ---
 
         function getSortOrder(status) {
-            if (status === 'Đang nung') return 0;     // Ưu tiên 1
-            if (status === 'Chờ xử lý') return 1;     // Ưu tiên 2
-            return 2;                                 // Ưu tiên 3 (Hoàn thành)
+            if (status === 'Đang nung') return 0;
+            if (status === 'Chờ xử lý') return 1;
+            return 2;
         }
 
         function sortLotsData(data) {
@@ -512,32 +562,27 @@
                 const sortOrderB = getSortOrder(b.status);
 
                 if (sortOrderA !== sortOrderB) {
-                    return sortOrderA - sortOrderB; // Sắp xếp theo trạng thái ưu tiên
+                    return sortOrderA - sortOrderB;
                 }
 
-                // Nếu cùng trạng thái, sắp xếp theo thời gian nung xong (nếu có)
                 if (a.time && b.time) {
                     const timeA = new Date(a.time).getTime();
                     const timeB = new Date(b.time).getTime();
 
-                    // Nếu là "Đang nung" hoặc "Chờ xử lý" -> Sắp xếp tăng dần theo thời gian hoàn thành (cái nào xong sớm hơn thì lên trước)
                     if (sortOrderA < 2) {
                         return timeA - timeB;
                     }
-                    // Nếu là "Hoàn thành" -> Sắp xếp giảm dần theo thời gian tạo (cái nào mới xong thì lên trước)
                     return timeB - timeA;
                 }
 
-                // Nếu không có thời gian, sắp xếp theo thời gian tạo (createdAt)
                 const createdAtA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
                 const createdAtB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
 
-                return createdAtB - createdAtA; // Lot mới thêm lên đầu
+                return createdAtB - createdAtA;
             });
         }
 
         function listenForLots() {
-            // Lắng nghe thay đổi theo thời gian thực (Realtime Listener)
             lotsCollection.onSnapshot(snapshot => {
                 const lots = [];
                 snapshot.forEach(doc => {
@@ -547,9 +592,8 @@
                     });
                 });
 
-                // Cập nhật biến toàn cục và vẽ lại bảng
                 allRowsData = sortLotsData(lots);
-                filterTable(true); // Lọc lại và reset trang về 1
+                filterTable(true);
             }, error => {
                 console.error("Lỗi khi lắng nghe Firestore:", error);
                 alert("Không thể tải dữ liệu Lot. Vui lòng kiểm tra kết nối.");
@@ -594,7 +638,6 @@
                     <td><button class="delete-btn" onclick="deleteLot('${data.id}')">Xóa</button></td>
                 `;
 
-                // Gắn sự kiện blur cho các ô có thể chỉnh sửa
                 const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
                 editableCells.forEach(cell => {
                     cell.addEventListener('blur', () => {
@@ -605,7 +648,6 @@
                 });
             });
 
-            // Cập nhật phân trang
             document.getElementById('pageInfo').textContent = `Trang ${currentPage} / ${totalPages > 0 ? totalPages : 1}`;
             document.getElementById('prevBtn').disabled = currentPage === 1 || totalPages <= 1;
             document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages <= 1;
@@ -613,14 +655,11 @@
 
         async function updateLotField(element, field, id, value = element.value) {
             try {
-                // Nếu là Lot, chuyển sang chữ hoa
                 const updatedValue = (field === 'lot') ? String(value).toUpperCase() : value;
 
-                // Cập nhật lên Firestore
                 await lotsCollection.doc(id).update({
                     [field]: updatedValue
                 });
-                // Dữ liệu sẽ tự động cập nhật qua listenForLots
             } catch (error) {
                 console.error("Lỗi khi cập nhật Firestore:", error);
                 alert("Không thể cập nhật dữ liệu.");
@@ -635,13 +674,12 @@
             const timeInput = row.cells[5].querySelector('.time-input');
             let timeValue = timeInput.value;
 
-            // Logic TỰ ĐỘNG CẬP NHẬT THỜI GIAN NUNG
+            // Tự động tính thời gian nung nếu chuyển sang 'Đang nung' và chưa có thời gian
             if (newStatus === 'Đang nung' && !timeValue) {
                 timeValue = calculateFinishTime();
             }
 
             try {
-                // Cập nhật lên Firestore
                 await lotsCollection.doc(id).update({
                     status: newStatus,
                     time: timeValue
@@ -662,7 +700,7 @@
             }
 
             const lines = lotData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-            const batch = db.batch(); // Sử dụng batch để thêm nhiều Lot cùng lúc
+            const batch = db.batch();
 
             let count = 0;
             lines.forEach(line => {
@@ -673,7 +711,7 @@
                     const keijo = columns[1];
                     const resistance = columns[2];
 
-                    const newLotRef = lotsCollection.doc(); // Tạo ID mới cho Lot
+                    const newLotRef = lotsCollection.doc();
 
                     batch.set(newLotRef, {
                         lot: lot,
@@ -682,7 +720,7 @@
                         status: 'Chờ xử lý',
                         time: '',
                         process: newProcess,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp() // Thêm dấu thời gian tạo
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     count++;
                 }
@@ -694,9 +732,8 @@
             }
 
             try {
-                await batch.commit(); // Gửi tất cả các Lot lên Firestore
+                await batch.commit();
 
-                // --- GỬI THÔNG BÁO DISCORD TỐI GIẢN ---
                 sendDiscordNotification(count, newProcess);
 
                 toggleForm();
@@ -712,18 +749,15 @@
 
             try {
                 await lotsCollection.doc(id).delete();
-                // Dữ liệu sẽ tự động cập nhật qua listenForLots
             } catch (error) {
                 console.error("Lỗi khi xóa Lot:", error);
                 alert("Không thể xóa Lot. Vui lòng thử lại.");
             }
         }
 
-        // --- CÁC HÀM XỬ LÝ KHÁC ---
-
         function calculateFinishTime() {
             const now = new Date();
-            now.setMinutes(now.getMinutes() + 100); // Cộng 100 phút (1h40')
+            now.setMinutes(now.getMinutes() + 105); // Cộng 105 phút (1h45')
             const pad = (num) => (num < 10 ? '0' : '') + num;
             const year = now.getFullYear();
             const month = pad(now.getMonth() + 1);
@@ -748,7 +782,6 @@
         function filterTable(resetPage = true) {
             const searchValue = document.getElementById('searchInput').value.toLowerCase();
 
-            // Lọc trên toàn bộ dữ liệu (allRowsData)
             filteredRowsData = allRowsData.filter(data => {
                 const lot = data.lot ? data.lot.toLowerCase() : '';
                 const keijo = data.keijo ? data.keijo.toLowerCase() : '';
@@ -758,7 +791,7 @@
             if (resetPage) {
                 currentPage = 1;
             }
-            renderTable(); // Vẽ lại bảng với dữ liệu đã lọc
+            renderTable();
         }
 
         function changePage(direction) {
@@ -766,7 +799,7 @@
             currentPage += direction;
             if (currentPage < 1) currentPage = 1;
             if (currentPage > totalPages) currentPage = totalPages;
-            renderTable(); // Vẽ lại bảng
+            renderTable();
         }
 
         function toggleForm() {
@@ -780,7 +813,6 @@
 
         // HÀM KHỞI TẠO
         document.addEventListener('DOMContentLoaded', () => {
-            // Xử lý sự kiện Enter trong form đăng nhập
             document.getElementById('password').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     login();
