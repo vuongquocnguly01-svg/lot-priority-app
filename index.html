@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Danh sách Lot hàng cần ưu tiên nung</title>
+    <title>Danh sách Lot hàng cần ưu tiên nung - Firebase</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
         /* --- CẤU HÌNH GỐC --- */
@@ -340,7 +340,7 @@
 
         <div class="add-form" id="addForm">
             <h3>Nhập thông tin Lot mới</h3>
-            <textarea id="newLotData" placeholder="Dán danh sách Lot, Keijo, Điện trở (Mỗi Lot 1 dòng. Ví dụ: LOT001 Z10S-UW 100)" rows="10" required></textarea>
+            <textarea id="newLotData" placeholder="Dán danh sách Lot, Keijo, Điện trở (Mỗi Lot 1 dòng. Ví dụ: CKP9A0000 Z10S-UW 100)" rows="10" required></textarea>
 
             <select id="newProcess" required>
                 <option value="">Chọn công đoạn</option>
@@ -382,203 +382,356 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
     <script>
+        // --- CẤU HÌNH FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCn866gY_3OiB_VL0fUDMe3ZCdhYDRbIJ8",
+            authDomain: "lot-priority-app-shared.firebaseapp.com",
+            projectId: "lot-priority-app-shared",
+            storageBucket: "lot-priority-app-shared.firebasestorage.app",
+            messagingSenderId: "12749059268",
+            appId: "1:12749059268:web:e1aa877135d8741461c591",
+            measurementId: "G-DPNT9PZ61Y"
+        };
+
+        // --- CẤU HÌNH DISCORD WEBHOOK ---
+        // Đã dán Webhook URL:
+        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
+
+        // Khởi tạo Firebase và các dịch vụ
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const lotsCollection = db.collection('lots');
+
         // --- CÁC BIẾN TOÀN CỤC ---
         let currentPage = 1;
         const rowsPerPage = 10;
-        let allRows = [];
-        let filteredRows = [];
+        let allRowsData = []; // Lưu trữ toàn bộ dữ liệu Lot (từ Firestore)
+        let filteredRowsData = []; // Lưu trữ dữ liệu Lot đã lọc
 
-        // Cấu hình đăng nhập đơn giản (Chỉ dùng cho LocalStorage, KHÔNG BẢO MẬT)
-        const VALID_USERNAME = 'admin';
-        const VALID_PASSWORD = '05o82k1';
-        const LOGIN_KEY = 'isLoggedIn';
+        // --- CÁC HÀM XỬ LÝ ĐĂNG NHẬP FIREBASE AUTH ---
 
-        // --- CÁC HÀM XỬ LÝ ĐĂNG NHẬP ---
-
-        function login() {
+        async function login() {
+            // Lấy giá trị từ Tên đăng nhập
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = '';
 
-            if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-                localStorage.setItem(LOGIN_KEY, 'true');
-                checkLoginStatus(); // Tải nội dung chính
-            } else {
-                errorMessage.textContent = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+            if (!username || !password) {
+                errorMessage.textContent = 'Vui lòng nhập Tên đăng nhập và Mật khẩu.';
+                return;
+            }
+
+            // Chuyển Tên đăng nhập thành định dạng Email hợp lệ: [username]@lot-priority-app-shared.com
+            const loginEmail = `${username}@lot-priority-app-shared.com`;
+
+            try {
+                await auth.signInWithEmailAndPassword(loginEmail, password);
+            } catch (error) {
+                console.error("Lỗi đăng nhập:", error.message);
+                errorMessage.textContent = 'Lỗi: Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
             }
         }
 
         function logout() {
-            localStorage.removeItem(LOGIN_KEY);
-            checkLoginStatus(); // Quay lại trang đăng nhập
+            auth.signOut();
         }
 
-        function checkLoginStatus() {
-            const isLoggedIn = localStorage.getItem(LOGIN_KEY) === 'true';
+        // Theo dõi trạng thái đăng nhập của Firebase
+        auth.onAuthStateChanged(user => {
             const loginContainer = document.getElementById('login-container');
             const mainContent = document.getElementById('main-content');
 
-            if (isLoggedIn) {
+            if (user) {
+                // Đã đăng nhập
                 loginContainer.style.display = 'none';
                 mainContent.style.display = 'block';
-                // Tải dữ liệu và khởi tạo bảng khi đăng nhập thành công
-                loadLotsFromLocalStorage();
-                updateRowNumbers();
-                updatePagination();
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+                // Lắng nghe dữ liệu realtime từ Firestore
+                listenForLots();
             } else {
+                // Chưa đăng nhập/Đăng xuất
                 loginContainer.style.display = 'block';
                 mainContent.style.display = 'none';
                 document.getElementById('error-message').textContent = '';
-                document.getElementById('username').value = '';
-                document.getElementById('password').value = '';
+            }
+        });
+
+        // --- HÀM GỬI THÔNG BÁO DISCORD (Tối giản) ---
+        async function sendDiscordNotification(count, newProcess) {
+            // Kiểm tra xem Webhook URL có hợp lệ không (chỉ cần kiểm tra chuỗi token)
+            if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("YOUR_WEBHOOK_ID")) {
+                console.warn("LƯU Ý: Webhook URL chưa được cài đặt hoặc không hợp lệ. Không thể gửi thông báo Discord.");
+                return;
+            }
+
+            const payload = {
+                username: "Hệ thống Ưu tiên Nung",
+                content: `🔔 CẢNH BÁO: CÓ ${count} LOT HÀNG MỚI CẦN ƯU TIÊN NUNG ở công đoạn **${newProcess}**! 🔔`
+            };
+
+            try {
+                const response = await fetch(DISCORD_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.ok) {
+                    console.log("Gửi thông báo Discord thành công.");
+                } else {
+                    console.error("Lỗi khi gửi thông báo Discord:", response.status, response.statusText);
+                    // Có thể thêm một cảnh báo trên giao diện người dùng nếu cần thiết
+                }
+
+            } catch (error) {
+                console.error("Lỗi kết nối khi gửi thông báo Discord:", error);
             }
         }
 
-        // --- CÁC HÀM XỬ LÝ SẮP XẾP VÀ LOCALSTORAGE ---
+        // --- CÁC HÀM XỬ LÝ FIREBASE FIRESTORE (CRUD & Realtime) ---
 
-        function saveLotsToLocalStorage() {
-            const tableBody = document.getElementById('tableBody');
-            const rows = Array.from(tableBody.querySelectorAll('tr'));
-            const lotsData = [];
-
-            rows.forEach(row => {
-                const timeInput = row.cells[5].querySelector('.time-input');
-
-                lotsData.push({
-                    lot: row.cells[1].textContent,
-                    keijo: row.cells[2].textContent,
-                    resistance: row.cells[3].textContent,
-                    status: row.cells[4].querySelector('.status-select').value,
-                    time: timeInput ? timeInput.value : '',
-                    process: row.cells[6].textContent
-                });
-            });
-            localStorage.setItem('lotList', JSON.stringify(lotsData));
+        function getSortOrder(status) {
+            if (status === 'Đang nung') return 0;     // Ưu tiên 1
+            if (status === 'Chờ xử lý') return 1;     // Ưu tiên 2
+            return 2;                                 // Ưu tiên 3 (Hoàn thành)
         }
 
-        function sortAndSaveLots() {
-            const tableBody = document.getElementById('tableBody');
-            let rows = Array.from(tableBody.querySelectorAll('tr'));
+        function sortLotsData(data) {
+            return data.sort((a, b) => {
+                const sortOrderA = getSortOrder(a.status);
+                const sortOrderB = getSortOrder(b.status);
 
-            const activeRows = rows.filter(row => row.cells[4].querySelector('.status-select').value !== 'Hoàn thành');
-            const completedRows = rows.filter(row => row.cells[4].querySelector('.status-select').value === 'Hoàn thành');
+                if (sortOrderA !== sortOrderB) {
+                    return sortOrderA - sortOrderB; // Sắp xếp theo trạng thái ưu tiên
+                }
 
-            tableBody.innerHTML = '';
-            [...activeRows, ...completedRows].forEach(row => {
-                tableBody.appendChild(row);
+                // Nếu cùng trạng thái, sắp xếp theo thời gian nung xong (nếu có)
+                if (a.time && b.time) {
+                    const timeA = new Date(a.time).getTime();
+                    const timeB = new Date(b.time).getTime();
+
+                    // Nếu là "Đang nung" hoặc "Chờ xử lý" -> Sắp xếp tăng dần theo thời gian hoàn thành (cái nào xong sớm hơn thì lên trước)
+                    if (sortOrderA < 2) {
+                        return timeA - timeB;
+                    }
+                    // Nếu là "Hoàn thành" -> Sắp xếp giảm dần theo thời gian tạo (cái nào mới xong thì lên trước)
+                    return timeB - timeA;
+                }
+
+                // Nếu không có thời gian, sắp xếp theo thời gian tạo (createdAt)
+                const createdAtA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+                const createdAtB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+
+                return createdAtB - createdAtA; // Lot mới thêm lên đầu
             });
-
-            saveLotsToLocalStorage();
-            updateRowNumbers();
-            updatePagination();
         }
 
-        function loadLotsFromLocalStorage() {
-            const savedData = localStorage.getItem('lotList');
-            if (savedData) {
-                const lots = JSON.parse(savedData);
-
-                const activeLots = lots.filter(data => data.status !== 'Hoàn thành');
-                const completedLots = lots.filter(data => data.status === 'Hoàn thành');
-                const sortedLots = [...activeLots, ...completedLots];
-
-                const tableBody = document.getElementById('tableBody');
-                tableBody.innerHTML = '';
-
-                const defaultStatusClass = {
-                    'Chờ xử lý': 'status-pending',
-                    'Đang nung': 'status-in-progress',
-                    'Hoàn thành': 'status-completed'
-                };
-
-                sortedLots.forEach(data => {
-                    const newRow = document.createElement('tr');
-                    tableBody.appendChild(newRow);
-
-                    const statusClass = defaultStatusClass[data.status] || 'status-pending';
-
-                    newRow.innerHTML = `
-                        <td></td>
-                        <td contenteditable="true" data-type="lot">${data.lot}</td>
-                        <td contenteditable="true" data-type="keijo">${data.keijo}</td>
-                        <td contenteditable="true" data-type="resistance">${data.resistance}</td>
-                        <td>
-                            <select class="status-select ${statusClass}" onchange="changeStatus(this)">
-                                <option value="Chờ xử lý" ${data.status === 'Chờ xử lý' ? 'selected' : ''}>Chờ xử lý</option>
-                                <option value="Đang nung" ${data.status === 'Đang nung' ? 'selected' : ''}>Đang nung</option>
-                                <option value="Hoàn thành" ${data.status === 'Hoàn thành' ? 'selected' : ''}>Hoàn thành</option>
-                            </select>
-                        </td>
-                        <td><input type="datetime-local" class="time-input" value="${data.time}" onchange="sortAndSaveLots()"></td>
-                        <td contenteditable="true" data-type="process">${data.process}</td>
-                        <td><button class="delete-btn" onclick="deleteLot(this)">Xóa</button></td>
-                    `;
-
-                    const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
-                    editableCells.forEach(cell => {
-                        cell.addEventListener('blur', () => {
-                            sortAndSaveLots();
-                            if (cell.dataset.type === 'lot') {
-                                filterTable(false);
-                            }
-                        });
+        function listenForLots() {
+            // Lắng nghe thay đổi theo thời gian thực (Realtime Listener)
+            lotsCollection.onSnapshot(snapshot => {
+                const lots = [];
+                snapshot.forEach(doc => {
+                    lots.push({
+                        id: doc.id,
+                        ...doc.data()
                     });
                 });
+
+                // Cập nhật biến toàn cục và vẽ lại bảng
+                allRowsData = sortLotsData(lots);
+                filterTable(true); // Lọc lại và reset trang về 1
+            }, error => {
+                console.error("Lỗi khi lắng nghe Firestore:", error);
+                alert("Không thể tải dữ liệu Lot. Vui lòng kiểm tra kết nối.");
+            });
+        }
+
+        function renderTable() {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+            const totalPages = Math.ceil(filteredRowsData.length / rowsPerPage);
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+
+            const rowsToDisplay = filteredRowsData.slice(start, end);
+
+            const defaultStatusClass = {
+                'Chờ xử lý': 'status-pending',
+                'Đang nung': 'status-in-progress',
+                'Hoàn thành': 'status-completed'
+            };
+
+            rowsToDisplay.forEach((data, index) => {
+                const newRow = document.createElement('tr');
+                tableBody.appendChild(newRow);
+
+                const statusClass = defaultStatusClass[data.status] || 'status-pending';
+
+                newRow.innerHTML = `
+                    <td>${start + index + 1}</td>
+                    <td contenteditable="true" data-type="lot" data-id="${data.id}">${data.lot}</td>
+                    <td contenteditable="true" data-type="keijo" data-id="${data.id}">${data.keijo}</td>
+                    <td contenteditable="true" data-type="resistance" data-id="${data.id}">${data.resistance}</td>
+                    <td>
+                        <select class="status-select ${statusClass}" onchange="changeStatus(this, '${data.id}')">
+                            <option value="Chờ xử lý" ${data.status === 'Chờ xử lý' ? 'selected' : ''}>Chờ xử lý</option>
+                            <option value="Đang nung" ${data.status === 'Đang nung' ? 'selected' : ''}>Đang nung</option>
+                            <option value="Hoàn thành" ${data.status === 'Hoàn thành' ? 'selected' : ''}>Hoàn thành</option>
+                        </select>
+                    </td>
+                    <td><input type="datetime-local" class="time-input" value="${data.time || ''}" onchange="updateLotField(this, 'time', '${data.id}')"></td>
+                    <td contenteditable="true" data-type="process" data-id="${data.id}">${data.process}</td>
+                    <td><button class="delete-btn" onclick="deleteLot('${data.id}')">Xóa</button></td>
+                `;
+
+                // Gắn sự kiện blur cho các ô có thể chỉnh sửa
+                const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
+                editableCells.forEach(cell => {
+                    cell.addEventListener('blur', () => {
+                        const field = cell.dataset.type;
+                        const newValue = cell.textContent;
+                        updateLotField(cell, field, data.id, newValue);
+                    });
+                });
+            });
+
+            // Cập nhật phân trang
+            document.getElementById('pageInfo').textContent = `Trang ${currentPage} / ${totalPages > 0 ? totalPages : 1}`;
+            document.getElementById('prevBtn').disabled = currentPage === 1 || totalPages <= 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages <= 1;
+        }
+
+        async function updateLotField(element, field, id, value = element.value) {
+            try {
+                // Nếu là Lot, chuyển sang chữ hoa
+                const updatedValue = (field === 'lot') ? String(value).toUpperCase() : value;
+
+                // Cập nhật lên Firestore
+                await lotsCollection.doc(id).update({
+                    [field]: updatedValue
+                });
+                // Dữ liệu sẽ tự động cập nhật qua listenForLots
+            } catch (error) {
+                console.error("Lỗi khi cập nhật Firestore:", error);
+                alert("Không thể cập nhật dữ liệu.");
             }
         }
 
-        // --- HÀM TÍNH TOÁN THỜI GIAN KẾT THÚC NUNG ---
-        function calculateFinishTime() {
-            // Lấy thời điểm hiện tại
-            const now = new Date();
-
-            // Cộng thêm 1 giờ (60 phút) và 40 phút
-            // Tổng cộng 100 phút
-            now.setMinutes(now.getMinutes() + 100);
-
-            // Hàm đệm số 0 (ví dụ: 9 -> '09')
-            const pad = (num) => (num < 10 ? '0' : '') + num;
-
-            // Định dạng thành chuỗi 'YYYY-MM-DDThh:mm' cho input type="datetime-local"
-            const year = now.getFullYear();
-            const month = pad(now.getMonth() + 1); // Tháng bắt đầu từ 0
-            const day = pad(now.getDate());
-            const hour = pad(now.getHours());
-            const minute = pad(now.getMinutes());
-
-            return `${year}-${month}-${day}T${hour}:${minute}`;
-        }
-
-
-        // --- CÁC HÀM XỬ LÝ SỰ KIỆN VÀ PHÂN TRANG KHÁC ---
-
-        function updateRowNumbers() {
-            const allRowsInTable = document.querySelectorAll('#tableBody tr');
-            allRowsInTable.forEach((row, index) => {
-                row.cells[0].textContent = index + 1;
-            });
-            allRows = Array.from(document.querySelectorAll('#tableBody tr'));
-            filterTable(false);
-        }
-
-        function changeStatus(selectElement) {
+        async function changeStatus(selectElement, id) {
             const newStatus = selectElement.value;
             updateStatusClass(selectElement, newStatus);
 
             const row = selectElement.closest('tr');
             const timeInput = row.cells[5].querySelector('.time-input');
+            let timeValue = timeInput.value;
 
             // Logic TỰ ĐỘNG CẬP NHẬT THỜI GIAN NUNG
-            if (newStatus === 'Đang nung' && !timeInput.value) {
-                // Chỉ cập nhật nếu trạng thái là "Đang nung" và ô thời gian đang trống
-                timeInput.value = calculateFinishTime();
-            } else if (newStatus !== 'Đang nung') {
-                // Nếu muốn xóa khi chuyển trạng thái khác "Hoàn thành", uncomment dòng dưới:
-                // timeInput.value = '';
+            if (newStatus === 'Đang nung' && !timeValue) {
+                timeValue = calculateFinishTime();
             }
 
-            sortAndSaveLots();
+            try {
+                // Cập nhật lên Firestore
+                await lotsCollection.doc(id).update({
+                    status: newStatus,
+                    time: timeValue
+                });
+            } catch (error) {
+                console.error("Lỗi khi cập nhật trạng thái:", error);
+                alert("Không thể cập nhật trạng thái Lot.");
+            }
+        }
+
+        async function addNewLot() {
+            const lotData = document.getElementById('newLotData').value;
+            const newProcess = document.getElementById('newProcess').value;
+
+            if (!lotData || !newProcess) {
+                alert('Vui lòng điền đủ dữ liệu Lot (Lot, Keijo, Điện trở) và chọn Công đoạn!');
+                return;
+            }
+
+            const lines = lotData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const batch = db.batch(); // Sử dụng batch để thêm nhiều Lot cùng lúc
+
+            let count = 0;
+            lines.forEach(line => {
+                const columns = line.split(/\s+/).filter(col => col.length > 0);
+
+                if (columns.length >= 3) {
+                    const lot = columns[0].toUpperCase();
+                    const keijo = columns[1];
+                    const resistance = columns[2];
+
+                    const newLotRef = lotsCollection.doc(); // Tạo ID mới cho Lot
+
+                    batch.set(newLotRef, {
+                        lot: lot,
+                        keijo: keijo,
+                        resistance: resistance,
+                        status: 'Chờ xử lý',
+                        time: '',
+                        process: newProcess,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp() // Thêm dấu thời gian tạo
+                    });
+                    count++;
+                }
+            });
+
+            if (count === 0) {
+                alert('Không tìm thấy dữ liệu Lot hợp lệ (Lot, Keijo, Điện trở). Vui lòng kiểm tra lại định dạng!');
+                return;
+            }
+
+            try {
+                await batch.commit(); // Gửi tất cả các Lot lên Firestore
+
+                // --- GỬI THÔNG BÁO DISCORD TỐI GIẢN ---
+                sendDiscordNotification(count, newProcess);
+
+                toggleForm();
+                alert(`Thêm thành công ${count} Lot mới!`);
+            } catch (error) {
+                console.error("Lỗi khi thêm Lot vào Firestore:", error);
+                alert("Không thể thêm Lot mới. Vui lòng thử lại.");
+            }
+        }
+
+        async function deleteLot(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa Lot này không?')) return;
+
+            try {
+                await lotsCollection.doc(id).delete();
+                // Dữ liệu sẽ tự động cập nhật qua listenForLots
+            } catch (error) {
+                console.error("Lỗi khi xóa Lot:", error);
+                alert("Không thể xóa Lot. Vui lòng thử lại.");
+            }
+        }
+
+        // --- CÁC HÀM XỬ LÝ KHÁC ---
+
+        function calculateFinishTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 100); // Cộng 100 phút (1h40')
+            const pad = (num) => (num < 10 ? '0' : '') + num;
+            const year = now.getFullYear();
+            const month = pad(now.getMonth() + 1);
+            const day = pad(now.getDate());
+            const hour = pad(now.getHours());
+            const minute = pad(now.getMinutes());
+
+            return `${year}-${month}-${day}T${hour}:${minute}`;
         }
 
         function updateStatusClass(selectElement, status) {
@@ -594,44 +747,26 @@
 
         function filterTable(resetPage = true) {
             const searchValue = document.getElementById('searchInput').value.toLowerCase();
-            const rows = allRows;
-            filteredRows = [];
 
-            rows.forEach(row => {
-                const lotCell = row.cells[1].textContent.toLowerCase();
-                const keijoCell = row.cells[2].textContent.toLowerCase();
-
-                // Mở rộng tìm kiếm sang cả cột Keijo
-                if (lotCell.includes(searchValue) || keijoCell.includes(searchValue)) {
-                    filteredRows.push(row);
-                }
+            // Lọc trên toàn bộ dữ liệu (allRowsData)
+            filteredRowsData = allRowsData.filter(data => {
+                const lot = data.lot ? data.lot.toLowerCase() : '';
+                const keijo = data.keijo ? data.keijo.toLowerCase() : '';
+                return lot.includes(searchValue) || keijo.includes(searchValue);
             });
 
             if (resetPage) {
                 currentPage = 1;
             }
-            updatePagination();
-        }
-
-        function updatePagination() {
-            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
-            const start = (currentPage - 1) * rowsPerPage;
-            const end = start + rowsPerPage;
-
-            allRows.forEach(row => row.style.display = 'none');
-            filteredRows.slice(start, end).forEach(row => row.style.display = '');
-
-            document.getElementById('pageInfo').textContent = `Trang ${currentPage} / ${totalPages > 0 ? totalPages : 1}`;
-            document.getElementById('prevBtn').disabled = currentPage === 1 || totalPages <= 1;
-            document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages <= 1;
+            renderTable(); // Vẽ lại bảng với dữ liệu đã lọc
         }
 
         function changePage(direction) {
-            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+            const totalPages = Math.ceil(filteredRowsData.length / rowsPerPage);
             currentPage += direction;
             if (currentPage < 1) currentPage = 1;
             if (currentPage > totalPages) currentPage = totalPages;
-            updatePagination();
+            renderTable(); // Vẽ lại bảng
         }
 
         function toggleForm() {
@@ -643,103 +778,8 @@
             }
         }
 
-        function addNewLot() {
-            const lotData = document.getElementById('newLotData').value;
-            const newProcess = document.getElementById('newProcess').value;
-
-            if (!lotData || !newProcess) {
-                alert('Vui lòng điền đủ dữ liệu Lot (Lot, Keijo, Điện trở) và chọn Công đoạn!');
-                return;
-            }
-
-            const lines = lotData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-            const processedLots = [];
-
-            lines.forEach(line => {
-                const columns = line.split(/\s+/).filter(col => col.length > 0);
-
-                if (columns.length >= 3) {
-                    // *** ĐÃ THÊM .toUpperCase() VÀO ĐÂY ***
-                    const lot = columns[0].toUpperCase();
-                    const keijo = columns[1];
-                    const resistance = columns[2];
-                    processedLots.push({ lot, keijo, resistance });
-                }
-            });
-
-            if (processedLots.length === 0) {
-                alert('Không tìm thấy dữ liệu Lot hợp lệ (Lot, Keijo, Điện trở). Vui lòng kiểm tra lại định dạng!');
-                return;
-            }
-
-            const tableBody = document.getElementById('tableBody');
-            const defaultStatusClass = 'status-pending';
-
-            processedLots.forEach(({ lot, keijo, resistance }) => {
-                const newRow = document.createElement('tr');
-
-                if (tableBody.firstChild) {
-                    tableBody.insertBefore(newRow, tableBody.firstChild);
-                } else {
-                    tableBody.appendChild(newRow);
-                }
-
-                newRow.innerHTML = `
-                    <td></td>
-                    <td contenteditable="true" data-type="lot">${lot}</td>
-                    <td contenteditable="true" data-type="keijo">${keijo}</td>
-                    <td contenteditable="true" data-type="resistance">${resistance}</td>
-                    <td>
-                        <select class="status-select ${defaultStatusClass}" onchange="changeStatus(this)">
-                            <option value="Chờ xử lý" selected>Chờ xử lý</option>
-                            <option value="Đang nung">Đang nung</option>
-                            <option value="Hoàn thành">Hoàn thành</option>
-                        </select>
-                    </td>
-                    <td><input type="datetime-local" class="time-input" value="" onchange="sortAndSaveLots()"></td>
-                    <td contenteditable="true" data-type="process">${newProcess}</td>
-                    <td><button class="delete-btn" onclick="deleteLot(this)">Xóa</button></td>
-                `;
-
-                const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
-                editableCells.forEach(cell => {
-                    cell.addEventListener('blur', () => {
-                        sortAndSaveLots();
-                        if (cell.dataset.type === 'lot') {
-                            filterTable(false);
-                        }
-                    });
-                });
-            });
-
-            toggleForm();
-            sortAndSaveLots();
-            alert(`Thêm thành công ${processedLots.length} Lot mới!`);
-        }
-
-        function deleteLot(button) {
-            if (!confirm('Bạn có chắc chắn muốn xóa Lot này không?')) return;
-
-            const row = button.closest('tr');
-            row.remove();
-
-            sortAndSaveLots();
-
-            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
-            if (currentPage > totalPages && totalPages > 0) {
-                currentPage = totalPages;
-            }
-            if (filteredRows.length === 0) {
-                currentPage = 1;
-            }
-            updatePagination();
-        }
-
         // HÀM KHỞI TẠO
         document.addEventListener('DOMContentLoaded', () => {
-            // Chỉ kiểm tra trạng thái đăng nhập, nếu thành công mới tải dữ liệu
-            checkLoginStatus();
-
             // Xử lý sự kiện Enter trong form đăng nhập
             document.getElementById('password').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
