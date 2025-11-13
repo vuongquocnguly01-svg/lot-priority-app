@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách Lot hàng cần ưu tiên nung</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CẤU HÌNH GỐC --- */
+        :root {
+            --primary-color: #007bff; /* Màu xanh dương chính */
+            --success-color: #28a745; /* Màu xanh lá cho nút Thêm */
+            --danger-color: #dc3545; /* Màu đỏ cho nút Xóa/Đăng xuất */
+            --text-color: #333;
+            --bg-color: #f8f9fa; /* Màu nền nhạt */
+            --border-color: #dee2e6;
+            --hover-bg: #e9ecef;
+            --shadow-light: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Cho nội dung chính bắt đầu từ trên */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* --- CSS ĐĂNG NHẬP --- */
+        #login-container {
+            position: absolute; /* Đảm bảo nó ở giữa màn hình */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 350px;
+            padding: 30px;
+            background-color: white;
+            box-shadow: var(--shadow-light);
+            border-radius: 10px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        #login-container h2 {
+            color: var(--primary-color);
+            margin-bottom: 25px;
+        }
+        #login-container input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        #login-container input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+        #login-container button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 16px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        #login-container button:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+        #error-message {
+            color: var(--danger-color);
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        /* --- CSS NỘI DUNG CHÍNH --- */
+        #main-content {
+            display: none;
+            width: 95%;
+            max-width: 1400px;
+            margin-top: 0;
+            padding: 30px;
+            background-color: white;
+            box-shadow: var(--shadow-light);
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: var(--primary-color);
+            margin: 0;
+        }
+
+        #logout-button {
+            padding: 8px 15px;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #logout-button:hover {
+            background-color: #c82333;
+        }
+
+        /* --- Thanh tìm kiếm và nút Thêm Lot --- */
+        .top-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .search-container input {
+            padding: 10px 15px;
+            width: 350px;
+            font-size: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            transition: border-color 0.2s;
+        }
+        .search-container input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .add-button {
+            padding: 10px 20px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        .add-button:hover {
+            background-color: #1e7e34;
+        }
+
+        /* --- Form Thêm Lot --- */
+        .add-form {
+            display: none;
+            margin: 20px auto;
+            width: 100%;
+            padding: 20px;
+            background-color: var(--hover-bg);
+            border: 1px solid var(--border-color);
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .add-form h3 {
+            color: var(--text-color);
+            margin-top: 0;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 10px;
+        }
+        .add-form textarea,
+        .add-form select {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+        .add-form textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        .add-form button {
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .add-form button:first-of-type { /* Nút Thêm */
+            background-color: var(--success-color);
+            color: white;
+            margin-right: 10px;
+        }
+        .add-form button:last-of-type { /* Nút Hủy */
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        /* --- Bảng Dữ liệu --- */
+        table {
+            width: 100%;
+            border-collapse: separate; /* Sử dụng separate để bo góc */
+            border-spacing: 0;
+            margin-top: 15px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden; /* Cần thiết cho bo góc */
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            text-transform: uppercase;
+            font-weight: 700;
+            border-bottom: none;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:nth-child(even) { /* Màu nền xen kẽ */
+            background-color: #f6f6f6;
+        }
+        tr:hover {
+            background-color: var(--hover-bg);
+        }
+
+        /* --- Ô chỉnh sửa trực tiếp --- */
+        td[contenteditable="true"] {
+            border: 1px solid transparent; /* Mặc định trong suốt */
+            cursor: text;
+        }
+        td[contenteditable="true"]:hover {
+            border: 1px dashed #aaa;
+        }
+        td[contenteditable="true"]:focus {
+            border: 1px solid var(--primary-color);
+            background-color: #e6f7ff; /* Màu xanh nhạt khi đang sửa */
+            outline: none;
+        }
+
+        /* --- Trạng thái và Input --- */
+        .status-select {
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-weight: 700;
+        }
+        .status-pending { color: orange; border-color: orange; }
+        .status-in-progress { color: var(--primary-color); border-color: var(--primary-color); }
+        .status-completed { color: var(--success-color); border-color: var(--success-color); }
+
+        .time-input {
+            padding: 5px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            width: 150px;
+        }
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        /* --- Phân trang --- */
+        .pagination {
+            text-align: center;
+            margin-top: 25px;
+        }
+        .pagination button {
+            padding: 10px 18px;
+            margin: 0 5px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .pagination button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        .pagination button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            color: #666;
+        }
+        .pagination span {
+            margin: 0 10px;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+    </style>
+</head>
+<body>
+    <div id="login-container">
+        <h2>Đăng nhập Hệ thống</h2>
+        <input type="text" id="username" placeholder="Tên đăng nhập">
+        <input type="password" id="password" placeholder="Mật khẩu">
+        <button onclick="login()">Đăng nhập</button>
+        <p id="error-message"></p>
+    </div>
+
+    <div id="main-content">
+        <header>
+            <h1><span style="color: var(--success-color);">Danh sách Lot</span> Cần Ưu Tiên</h1>
+            <button id="logout-button" onclick="logout()">Đăng xuất 🚪</button>
+        </header>
+
+        <div class="top-controls">
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Tìm kiếm theo số Lot hoặc Keijo..." onkeyup="filterTable()">
+            </div>
+            <button class="add-button" onclick="toggleForm()">Thêm Lot mới +</button>
+        </div>
+
+        <div class="add-form" id="addForm">
+            <h3>Nhập thông tin Lot mới</h3>
+            <textarea id="newLotData" placeholder="Dán danh sách Lot, Keijo, Điện trở (Mỗi Lot 1 dòng. Ví dụ: LOT001 Z10S-UW 100)" rows="10" required></textarea>
+
+            <select id="newProcess" required>
+                <option value="">Chọn công đoạn</option>
+                <option value="UC">UC</option>
+                <option value="C">C</option>
+                <option value="R">R</option>
+                <option value="T1">T1</option>
+                <option value="CLF">CLF</option>
+                <option value="T2">T2</option>
+                <option value="T3">T3</option>
+                <option value="G1">G1</option>
+                <option value="GH">GH</option>
+            </select>
+            <button onclick="addNewLot()">Thêm</button>
+            <button onclick="toggleForm()">Hủy</button>
+        </div>
+
+        <table id="lotTable">
+            <thead>
+                <tr>
+                    <th>STT</th>
+                    <th>Số Lot</th>
+                    <th>Keijo</th>
+                    <th>Điện trở (Ω)</th>
+                    <th>Trạng thái</th>
+                    <th>Thời gian nung xong</th>
+                    <th>Công đoạn</th>
+                    <th>DELETE</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                </tbody>
+        </table>
+
+        <div class="pagination">
+            <button id="prevBtn" onclick="changePage(-1)" disabled>◀ Trước</button>
+            <span id="pageInfo">Trang 1 / 1</span>
+            <button id="nextBtn" onclick="changePage(1)">Sau ▶</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CÁC BIẾN TOÀN CỤC ---
+        let currentPage = 1;
+        const rowsPerPage = 10;
+        let allRows = [];
+        let filteredRows = [];
+
+        // Cấu hình đăng nhập đơn giản (Chỉ dùng cho LocalStorage, KHÔNG BẢO MẬT)
+        const VALID_USERNAME = 'admin';
+        const VALID_PASSWORD = '05o82k1';
+        const LOGIN_KEY = 'isLoggedIn';
+
+        // --- CÁC HÀM XỬ LÝ ĐĂNG NHẬP ---
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+
+            if (username === VALID_USERNAME && password === VALID_PASSWORD) {
+                localStorage.setItem(LOGIN_KEY, 'true');
+                checkLoginStatus(); // Tải nội dung chính
+            } else {
+                errorMessage.textContent = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem(LOGIN_KEY);
+            checkLoginStatus(); // Quay lại trang đăng nhập
+        }
+
+        function checkLoginStatus() {
+            const isLoggedIn = localStorage.getItem(LOGIN_KEY) === 'true';
+            const loginContainer = document.getElementById('login-container');
+            const mainContent = document.getElementById('main-content');
+
+            if (isLoggedIn) {
+                loginContainer.style.display = 'none';
+                mainContent.style.display = 'block';
+                // Tải dữ liệu và khởi tạo bảng khi đăng nhập thành công
+                loadLotsFromLocalStorage();
+                updateRowNumbers();
+                updatePagination();
+            } else {
+                loginContainer.style.display = 'block';
+                mainContent.style.display = 'none';
+                document.getElementById('error-message').textContent = '';
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            }
+        }
+
+        // --- CÁC HÀM XỬ LÝ SẮP XẾP VÀ LOCALSTORAGE ---
+
+        function saveLotsToLocalStorage() {
+            const tableBody = document.getElementById('tableBody');
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+            const lotsData = [];
+
+            rows.forEach(row => {
+                const timeInput = row.cells[5].querySelector('.time-input');
+
+                lotsData.push({
+                    lot: row.cells[1].textContent,
+                    keijo: row.cells[2].textContent,
+                    resistance: row.cells[3].textContent,
+                    status: row.cells[4].querySelector('.status-select').value,
+                    time: timeInput ? timeInput.value : '',
+                    process: row.cells[6].textContent
+                });
+            });
+            localStorage.setItem('lotList', JSON.stringify(lotsData));
+        }
+
+        function sortAndSaveLots() {
+            const tableBody = document.getElementById('tableBody');
+            let rows = Array.from(tableBody.querySelectorAll('tr'));
+
+            const activeRows = rows.filter(row => row.cells[4].querySelector('.status-select').value !== 'Hoàn thành');
+            const completedRows = rows.filter(row => row.cells[4].querySelector('.status-select').value === 'Hoàn thành');
+
+            tableBody.innerHTML = '';
+            [...activeRows, ...completedRows].forEach(row => {
+                tableBody.appendChild(row);
+            });
+
+            saveLotsToLocalStorage();
+            updateRowNumbers();
+            updatePagination();
+        }
+
+        function loadLotsFromLocalStorage() {
+            const savedData = localStorage.getItem('lotList');
+            if (savedData) {
+                const lots = JSON.parse(savedData);
+
+                const activeLots = lots.filter(data => data.status !== 'Hoàn thành');
+                const completedLots = lots.filter(data => data.status === 'Hoàn thành');
+                const sortedLots = [...activeLots, ...completedLots];
+
+                const tableBody = document.getElementById('tableBody');
+                tableBody.innerHTML = '';
+
+                const defaultStatusClass = {
+                    'Chờ xử lý': 'status-pending',
+                    'Đang nung': 'status-in-progress',
+                    'Hoàn thành': 'status-completed'
+                };
+
+                sortedLots.forEach(data => {
+                    const newRow = document.createElement('tr');
+                    tableBody.appendChild(newRow);
+
+                    const statusClass = defaultStatusClass[data.status] || 'status-pending';
+
+                    newRow.innerHTML = `
+                        <td></td>
+                        <td contenteditable="true" data-type="lot">${data.lot}</td>
+                        <td contenteditable="true" data-type="keijo">${data.keijo}</td>
+                        <td contenteditable="true" data-type="resistance">${data.resistance}</td>
+                        <td>
+                            <select class="status-select ${statusClass}" onchange="changeStatus(this)">
+                                <option value="Chờ xử lý" ${data.status === 'Chờ xử lý' ? 'selected' : ''}>Chờ xử lý</option>
+                                <option value="Đang nung" ${data.status === 'Đang nung' ? 'selected' : ''}>Đang nung</option>
+                                <option value="Hoàn thành" ${data.status === 'Hoàn thành' ? 'selected' : ''}>Hoàn thành</option>
+                            </select>
+                        </td>
+                        <td><input type="datetime-local" class="time-input" value="${data.time}" onchange="sortAndSaveLots()"></td>
+                        <td contenteditable="true" data-type="process">${data.process}</td>
+                        <td><button class="delete-btn" onclick="deleteLot(this)">Xóa</button></td>
+                    `;
+
+                    const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
+                    editableCells.forEach(cell => {
+                        cell.addEventListener('blur', () => {
+                            sortAndSaveLots();
+                            if (cell.dataset.type === 'lot') {
+                                filterTable(false);
+                            }
+                        });
+                    });
+                });
+            }
+        }
+
+        // --- HÀM TÍNH TOÁN THỜI GIAN KẾT THÚC NUNG ---
+        function calculateFinishTime() {
+            // Lấy thời điểm hiện tại
+            const now = new Date();
+
+            // Cộng thêm 1 giờ (60 phút) và 40 phút
+            // Tổng cộng 100 phút
+            now.setMinutes(now.getMinutes() + 100);
+
+            // Hàm đệm số 0 (ví dụ: 9 -> '09')
+            const pad = (num) => (num < 10 ? '0' : '') + num;
+
+            // Định dạng thành chuỗi 'YYYY-MM-DDThh:mm' cho input type="datetime-local"
+            const year = now.getFullYear();
+            const month = pad(now.getMonth() + 1); // Tháng bắt đầu từ 0
+            const day = pad(now.getDate());
+            const hour = pad(now.getHours());
+            const minute = pad(now.getMinutes());
+
+            return `${year}-${month}-${day}T${hour}:${minute}`;
+        }
+
+
+        // --- CÁC HÀM XỬ LÝ SỰ KIỆN VÀ PHÂN TRANG KHÁC ---
+
+        function updateRowNumbers() {
+            const allRowsInTable = document.querySelectorAll('#tableBody tr');
+            allRowsInTable.forEach((row, index) => {
+                row.cells[0].textContent = index + 1;
+            });
+            allRows = Array.from(document.querySelectorAll('#tableBody tr'));
+            filterTable(false);
+        }
+
+        function changeStatus(selectElement) {
+            const newStatus = selectElement.value;
+            updateStatusClass(selectElement, newStatus);
+
+            const row = selectElement.closest('tr');
+            const timeInput = row.cells[5].querySelector('.time-input');
+
+            // Logic TỰ ĐỘNG CẬP NHẬT THỜI GIAN NUNG
+            if (newStatus === 'Đang nung' && !timeInput.value) {
+                // Chỉ cập nhật nếu trạng thái là "Đang nung" và ô thời gian đang trống
+                timeInput.value = calculateFinishTime();
+            } else if (newStatus !== 'Đang nung') {
+                // Nếu muốn xóa khi chuyển trạng thái khác "Hoàn thành", uncomment dòng dưới:
+                // timeInput.value = '';
+            }
+
+            sortAndSaveLots();
+        }
+
+        function updateStatusClass(selectElement, status) {
+            selectElement.className = 'status-select';
+            if (status === 'Chờ xử lý') {
+                selectElement.classList.add('status-pending');
+            } else if (status === 'Đang nung') {
+                selectElement.classList.add('status-in-progress');
+            } else if (status === 'Hoàn thành') {
+                selectElement.classList.add('status-completed');
+            }
+        }
+
+        function filterTable(resetPage = true) {
+            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            const rows = allRows;
+            filteredRows = [];
+
+            rows.forEach(row => {
+                const lotCell = row.cells[1].textContent.toLowerCase();
+                const keijoCell = row.cells[2].textContent.toLowerCase();
+
+                // Mở rộng tìm kiếm sang cả cột Keijo
+                if (lotCell.includes(searchValue) || keijoCell.includes(searchValue)) {
+                    filteredRows.push(row);
+                }
+            });
+
+            if (resetPage) {
+                currentPage = 1;
+            }
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+
+            allRows.forEach(row => row.style.display = 'none');
+            filteredRows.slice(start, end).forEach(row => row.style.display = '');
+
+            document.getElementById('pageInfo').textContent = `Trang ${currentPage} / ${totalPages > 0 ? totalPages : 1}`;
+            document.getElementById('prevBtn').disabled = currentPage === 1 || totalPages <= 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages <= 1;
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+            currentPage += direction;
+            if (currentPage < 1) currentPage = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            updatePagination();
+        }
+
+        function toggleForm() {
+            const form = document.getElementById('addForm');
+            form.style.display = form.style.display === 'none' || form.style.display === '' ? 'block' : 'none';
+            if (form.style.display === 'block') {
+                document.getElementById('newLotData').value = '';
+                document.getElementById('newProcess').value = '';
+            }
+        }
+
+        function addNewLot() {
+            const lotData = document.getElementById('newLotData').value;
+            const newProcess = document.getElementById('newProcess').value;
+
+            if (!lotData || !newProcess) {
+                alert('Vui lòng điền đủ dữ liệu Lot (Lot, Keijo, Điện trở) và chọn Công đoạn!');
+                return;
+            }
+
+            const lines = lotData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const processedLots = [];
+
+            lines.forEach(line => {
+                const columns = line.split(/\s+/).filter(col => col.length > 0);
+
+                if (columns.length >= 3) {
+                    // *** ĐÃ THÊM .toUpperCase() VÀO ĐÂY ***
+                    const lot = columns[0].toUpperCase();
+                    const keijo = columns[1];
+                    const resistance = columns[2];
+                    processedLots.push({ lot, keijo, resistance });
+                }
+            });
+
+            if (processedLots.length === 0) {
+                alert('Không tìm thấy dữ liệu Lot hợp lệ (Lot, Keijo, Điện trở). Vui lòng kiểm tra lại định dạng!');
+                return;
+            }
+
+            const tableBody = document.getElementById('tableBody');
+            const defaultStatusClass = 'status-pending';
+
+            processedLots.forEach(({ lot, keijo, resistance }) => {
+                const newRow = document.createElement('tr');
+
+                if (tableBody.firstChild) {
+                    tableBody.insertBefore(newRow, tableBody.firstChild);
+                } else {
+                    tableBody.appendChild(newRow);
+                }
+
+                newRow.innerHTML = `
+                    <td></td>
+                    <td contenteditable="true" data-type="lot">${lot}</td>
+                    <td contenteditable="true" data-type="keijo">${keijo}</td>
+                    <td contenteditable="true" data-type="resistance">${resistance}</td>
+                    <td>
+                        <select class="status-select ${defaultStatusClass}" onchange="changeStatus(this)">
+                            <option value="Chờ xử lý" selected>Chờ xử lý</option>
+                            <option value="Đang nung">Đang nung</option>
+                            <option value="Hoàn thành">Hoàn thành</option>
+                        </select>
+                    </td>
+                    <td><input type="datetime-local" class="time-input" value="" onchange="sortAndSaveLots()"></td>
+                    <td contenteditable="true" data-type="process">${newProcess}</td>
+                    <td><button class="delete-btn" onclick="deleteLot(this)">Xóa</button></td>
+                `;
+
+                const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
+                editableCells.forEach(cell => {
+                    cell.addEventListener('blur', () => {
+                        sortAndSaveLots();
+                        if (cell.dataset.type === 'lot') {
+                            filterTable(false);
+                        }
+                    });
+                });
+            });
+
+            toggleForm();
+            sortAndSaveLots();
+            alert(`Thêm thành công ${processedLots.length} Lot mới!`);
+        }
+
+        function deleteLot(button) {
+            if (!confirm('Bạn có chắc chắn muốn xóa Lot này không?')) return;
+
+            const row = button.closest('tr');
+            row.remove();
+
+            sortAndSaveLots();
+
+            const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            }
+            if (filteredRows.length === 0) {
+                currentPage = 1;
+            }
+            updatePagination();
+        }
+
+        // HÀM KHỞI TẠO
+        document.addEventListener('DOMContentLoaded', () => {
+            // Chỉ kiểm tra trạng thái đăng nhập, nếu thành công mới tải dữ liệu
+            checkLoginStatus();
+
+            // Xử lý sự kiện Enter trong form đăng nhập
+            document.getElementById('password').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
