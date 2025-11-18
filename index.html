@@ -3,382 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Danh sách Lot hàng cần ưu tiên nung - Firebase</title>
+    <title>Quản Lý Lot & Bảo Trì - Final Version</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        /* --- CẤU HÌNH GỐC --- */
+        /* --- GIAO DIỆN CƠ BẢN --- */
         :root {
-            --primary-color: #007bff; /* Màu xanh dương chính */
-            --success-color: #28a745; /* Màu xanh lá cho nút Thêm */
-            --danger-color: #dc3545; /* Màu đỏ cho nút Xóa/Đăng xuất */
-            --text-color: #333;
-            --bg-color: #f8f9fa; /* Màu nền nhạt */
-            --border-color: #dee2e6;
-            --hover-bg: #e9ecef;
-            --shadow-light: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --primary: #007bff; --success: #28a745; --danger: #dc3545;
+            --text: #333; --bg: #f4f6f9; --border: #dee2e6;
         }
+        body { font-family: 'Roboto', sans-serif; margin: 0; background: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
 
-        body {
-            font-family: 'Roboto', sans-serif;
-            margin: 0;
-            background-color: var(--bg-color);
-            display: flex;
-            justify-content: center;
-            align-items: flex-start; /* Cho nội dung chính bắt đầu từ trên */
-            min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
+        /* --- KHUNG ĐĂNG NHẬP --- */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center; }
+        .login-box input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
 
-        /* --- CSS ĐĂNG NHẬP --- */
-        #login-container {
-            position: absolute; /* Đảm bảo nó ở giữa màn hình */
-            top: 50%;
-            transform: translateY(-50%);
-            width: 350px;
-            padding: 30px;
-            background-color: white;
-            box-shadow: var(--shadow-light);
-            border-radius: 10px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        #login-container h2 {
-            color: var(--primary-color);
-            margin-bottom: 25px;
-        }
-        #login-container input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            box-sizing: border-box;
-            transition: border-color 0.2s;
-        }
-        #login-container input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
-        #login-container button {
-            width: 100%;
-            padding: 12px;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 20px;
-            font-size: 16px;
-            transition: background-color 0.2s, transform 0.1s;
-        }
-        #login-container button:hover {
-            background-color: #0056b3;
-            transform: translateY(-1px);
-        }
-        #error-message {
-            color: var(--danger-color);
-            margin-top: 10px;
-            font-size: 0.9em;
-        }
+        /* --- GIAO DIỆN CHÍNH --- */
+        #main-app { display: none; width: 100%; max-width: 1380px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
+        h1 { margin: 0; color: var(--primary); font-size: 24px; }
 
-        /* --- CSS NỘI DUNG CHÍNH --- */
-        #main-content {
-            display: none;
-            width: 95%;
-            max-width: 1400px;
-            margin-top: 0;
-            padding: 30px;
-            background-color: white;
-            box-shadow: var(--shadow-light);
-            border-radius: 10px;
-            box-sizing: border-box;
-        }
+        /* --- NÚT BẤM & INPUT --- */
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; font-size: 14px; transition: 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .btn-danger { background: var(--danger); }
+        .btn-success { background: var(--success); }
+        .btn-primary { background: var(--primary); }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .search-box { padding: 8px; border: 1px solid var(--border); border-radius: 4px; width: 300px; }
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 15px;
-            border-bottom: 2px solid var(--border-color);
-            margin-bottom: 20px;
-        }
+        /* --- BẢNG DỮ LIỆU --- */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+        th { background: var(--primary); color: white; text-transform: uppercase; font-size: 13px; }
+        td input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
 
-        h1 {
-            font-size: 28px;
-            color: var(--primary-color);
-            margin: 0;
-        }
+        /* --- TRẠNG THÁI --- */
+        .status-select { padding: 5px; border-radius: 4px; font-weight: bold; border: 1px solid #ccc; }
+        .st-pending { color: orange; border-color: orange; }
+        .st-running { color: var(--primary); border-color: var(--primary); }
+        .st-done { color: var(--success); border-color: var(--success); }
 
-        #logout-button {
-            padding: 8px 15px;
-            background-color: var(--danger-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        #logout-button:hover {
-            background-color: #c82333;
-        }
+        /* --- FORM THÊM LOT --- */
+        #add-lot-form { display: none; background: var(--bg); padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--border); }
+        #add-lot-form textarea { width: 100%; height: 100px; margin-bottom: 10px; padding: 8px; }
 
-        /* --- Thanh tìm kiếm và nút Thêm Lot --- */
-        .top-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
+        /* --- PHẦN BẢO TRÌ (CẢI TIẾN) --- */
+        .maintenance-section { margin-top: 40px; border-top: 2px dashed var(--border); padding-top: 20px; }
+        .maintenance-controls { display: flex; gap: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+        .maintenance-controls select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; font-weight: bold; }
 
-        .search-container input {
-            padding: 10px 15px;
-            width: 350px;
-            font-size: 16px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            transition: border-color 0.2s;
+        /* Style cho ô bảo trì thu gọn */
+        .task-cell { display: flex; align-items: center; gap: 8px; }
+        .task-cell input[type="date"] {
+            border: 1px solid #ddd; padding: 3px; border-radius: 4px; font-size: 12px;
+            width: 110px; transition: 0.2s;
         }
-        .search-container input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
+        .hidden-date { opacity: 0; pointer-events: none; width: 0 !important; padding: 0 !important; border: none !important; }
 
-        .add-button {
-            padding: 10px 20px;
-            background-color: var(--success-color);
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            border-radius: 6px;
-            transition: background-color 0.2s;
-        }
-        .add-button:hover {
-            background-color: #1e7e34;
-        }
+        /* Style cho ô ghi chú */
+        .note-input { width: 100%; border: 1px solid #ddd; padding: 5px; border-radius: 4px; }
+        .note-input:focus { border-color: var(--primary); outline: none; }
 
-        /* --- Form Thêm Lot --- */
-        .add-form {
-            display: none;
-            margin: 20px auto;
-            width: 100%;
-            padding: 20px;
-            background-color: var(--hover-bg);
-            border: 1px solid var(--border-color);
-            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05);
-            border-radius: 8px;
-            box-sizing: border-box;
-        }
-        .add-form h3 {
-            color: var(--text-color);
-            margin-top: 0;
-            border-bottom: 1px dashed var(--border-color);
-            padding-bottom: 10px;
-        }
-        .add-form textarea,
-        .add-form select {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            box-sizing: border-box;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-        }
-        .add-form textarea {
-            min-height: 120px;
-            resize: vertical;
-        }
-        .add-form button {
-            padding: 10px 15px;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-            border-radius: 4px;
-            margin-top: 10px;
-        }
-        .add-form button:first-of-type { /* Nút Thêm */
-            background-color: var(--success-color);
-            color: white;
-            margin-right: 10px;
-        }
-        .add-form button:last-of-type { /* Nút Hủy */
-            background-color: var(--danger-color);
-            color: white;
-        }
-
-        /* --- Bảng Dữ liệu --- */
-        table {
-            width: 100%;
-            border-collapse: separate; /* Sử dụng separate để bo góc */
-            border-spacing: 0;
-            margin-top: 15px;
-            background-color: white;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-            border-radius: 8px;
-            overflow: hidden; /* Cần thiết cho bo góc */
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-            font-size: 14px;
-        }
-        th {
-            background-color: var(--primary-color);
-            color: white;
-            text-transform: uppercase;
-            font-weight: 700;
-            border-bottom: none;
-        }
-        tr:last-child td {
-            border-bottom: none;
-        }
-        tr:nth-child(even) { /* Màu nền xen kẽ */
-            background-color: #f6f6f6;
-        }
-        tr:hover {
-            background-color: var(--hover-bg);
-        }
-
-        /* --- Ô chỉnh sửa trực tiếp --- */
-        td[contenteditable="true"] {
-            border: 1px solid transparent; /* Mặc định trong suốt */
-            cursor: text;
-        }
-        td[contenteditable="true"]:hover {
-            border: 1px dashed #aaa;
-        }
-        td[contenteditable="true"]:focus {
-            border: 1px solid var(--primary-color);
-            background-color: #e6f7ff; /* Màu xanh nhạt khi đang sửa */
-            outline: none;
-        }
-
-        /* --- Trạng thái và Input --- */
-        .status-select {
-            padding: 6px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            font-weight: 700;
-        }
-        .status-pending { color: orange; border-color: orange; }
-        .status-in-progress { color: var(--primary-color); border-color: var(--primary-color); }
-        .status-completed { color: var(--success-color); border-color: var(--success-color); }
-
-        .time-input {
-            padding: 5px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            width: 150px;
-        }
-        .delete-btn {
-            background-color: var(--danger-color);
-            color: white;
-            border: none;
-            padding: 6px 10px;
-            cursor: pointer;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-        .delete-btn:hover {
-            background-color: #c82333;
-        }
-
-        /* --- Phân trang --- */
-        .pagination {
-            text-align: center;
-            margin-top: 25px;
-        }
-        .pagination button {
-            padding: 10px 18px;
-            margin: 0 5px;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 6px;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-        .pagination button:hover:not(:disabled) {
-            background-color: #0056b3;
-        }
-        .pagination button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-            color: #666;
-        }
-        .pagination span {
-            margin: 0 10px;
-            font-weight: 700;
-            color: var(--text-color);
-        }
+        /* --- TIỆN ÍCH --- */
+        .loading { text-align: center; padding: 20px; color: #666; font-style: italic; }
+        .error-display { color: red; background: #ffe6e6; padding: 10px; border-radius: 4px; margin: 10px 0; display: none; }
     </style>
 </head>
 <body>
-    <div id="login-container">
-        <h2>Đăng nhập Hệ thống</h2>
-        <input type="text" id="username" placeholder="Tên đăng nhập">
-        <input type="password" id="password" placeholder="Mật khẩu">
-        <button onclick="login()">Đăng nhập</button>
-        <p id="error-message"></p>
+
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Đăng Nhập</h2>
+            <input type="text" id="username" placeholder="Tên đăng nhập">
+            <input type="password" id="password" placeholder="Mật khẩu">
+            <button onclick="handleLogin()">VÀO HỆ THỐNG</button>
+            <p id="login-msg" style="color: red; font-size: 13px; margin-top: 10px;"></p>
+        </div>
     </div>
 
-    <div id="main-content">
+    <div id="main-app">
         <header>
-            <h1><span style="color: var(--success-color);">Danh sách Lot</span> Cần Ưu Tiên</h1>
-            <button id="logout-button" onclick="logout()">Đăng xuất 🚪</button>
+            <h1>QUẢN LÝ LOT ƯU TIÊN</h1>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-danger" onclick="handleLogout()">Đăng xuất</button>
+            </div>
         </header>
 
-        <div class="top-controls">
-            <div class="search-container">
-                <input type="text" id="searchInput" placeholder="Tìm kiếm theo số Lot hoặc Keijo..." onkeyup="filterTable()">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <input type="text" class="search-box" id="searchInput" placeholder="Tìm số Lot hoặc Keijo..." onkeyup="renderLotsTable()">
+            <div>
+                <button class="btn btn-danger" id="btnDeleteMulti" onclick="deleteSelected()" style="display:none; margin-right: 10px;">Xóa đã chọn</button>
+                <button class="btn btn-success" onclick="toggleAddForm()">+ Thêm Lot Mới</button>
             </div>
-            <button class="add-button" onclick="toggleForm()">Thêm Lot mới +</button>
         </div>
 
-        <div class="add-form" id="addForm">
-            <h3>Nhập thông tin Lot mới</h3>
-            <textarea id="newLotData" placeholder="Dán danh sách Lot, Keijo, Điện trở (Mỗi Lot 1 dòng. Ví dụ: CKP9A0000 Z10S-UW 100)" rows="10" required></textarea>
-
-            <select id="newProcess" required>
-                <option value="">Chọn công đoạn</option>
-                <option value="UC">UC</option>
-                <option value="C">C</option>
-                <option value="R">R</option>
-                <option value="T1">T1</option>
-                <option value="CLF">CLF</option>
-                <option value="T2">T2</option>
-                <option value="T3">T3</option>
-                <option value="G1">G1</option>
-                <option value="GH">GH</option>
+        <div id="add-lot-form">
+            <h3>Thêm nhanh (Copy từ Excel)</h3>
+            <textarea id="inputLotData" placeholder="Dán dữ liệu: Lot  Keijo  ĐiệnTrở (Mỗi dòng 1 lot) VD: CKP6A0000 Z18 332"></textarea>
+            <select id="inputProcess" style="padding: 8px; width: 200px; margin-bottom: 10px;">
+                <option value="">-- Chọn Công Đoạn --</option>
+                <option value="UC">UC</option><option value="C">C</option><option value="R">R</option>
+                <option value="T1">T1</option><option value="CLF">CLF</option><option value="T2">T2</option>
+                <option value="T3">T3</option><option value="G1">G1</option><option value="GH">GH</option>
             </select>
-            <button onclick="addNewLot()">Thêm</button>
-            <button onclick="toggleForm()">Hủy</button>
+            <br>
+            <button class="btn btn-primary" onclick="submitNewLots()">Lưu Dữ Liệu</button>
+            <button class="btn btn-danger" onclick="toggleAddForm()">Hủy</button>
         </div>
 
-        <table id="lotTable">
+        <table>
             <thead>
                 <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="checkAll" onchange="toggleSelectAll()"></th>
                     <th>STT</th>
-                    <th>Số Lot</th>
+                    <th>Lot</th>
                     <th>Keijo</th>
-                    <th>Điện trở (Ω)</th>
+                    <th>Điện trở</th>
                     <th>Trạng thái</th>
-                    <th>Thời gian nung xong</th>
+                    <th>Giờ ra lò</th>
                     <th>Công đoạn</th>
-                    <th>DELETE</th>
+                    <th>Ghi chú</th>
+                    <th>Hành động</th>
                 </tr>
             </thead>
-            <tbody id="tableBody">
-                </tbody>
+            <tbody id="lotTableBody"></tbody>
         </table>
 
-        <div class="pagination">
-            <button id="prevBtn" onclick="changePage(-1)" disabled>◀ Trước</button>
-            <span id="pageInfo">Trang 1 / 1</span>
-            <button id="nextBtn" onclick="changePage(1)">Sau ▶</button>
+        <div style="margin-top: 15px; text-align: right;">
+            <span id="pagingInfo"></span>
+            <button class="btn btn-primary" onclick="prevPage()"> < </button>
+            <button class="btn btn-primary" onclick="nextPage()"> > </button>
+        </div>
+
+        <div class="maintenance-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>🛠 LỊCH SỬ BẢO TRÌ</h2>
+
+                <div class="maintenance-controls">
+                    <span>Xem dữ liệu:</span>
+                    <select id="viewMonth" onchange="changeViewDate()"></select>
+                    <select id="viewYear" onchange="changeViewDate()"></select>
+                    <button class="btn btn-outline" onclick="jumpToNow()">Về hiện tại</button>
+                </div>
+            </div>
+
+            <div id="maintenanceError" class="error-display">
+                Có lỗi tải dữ liệu. <button class="btn btn-danger" onclick="hardResetMaintenance()">Khôi phục dữ liệu gốc</button>
+            </div>
+
+            <div id="maintenanceLoading" class="loading">⏳ Đang tải dữ liệu bảo trì...</div>
+            <div id="maintenanceContent" style="display: none;">
+                </div>
         </div>
     </div>
 
@@ -387,7 +164,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
     <script>
-        // --- CẤU HÌNH FIREBASE ---
+        // 1. CẤU HÌNH FIREBASE & DISCORD
         const firebaseConfig = {
             apiKey: "AIzaSyCn866gY_3OiB_VL0fUDMe3ZCdhYDRbIJ8",
             authDomain: "lot-priority-app-shared.firebaseapp.com",
@@ -398,427 +175,509 @@
             measurementId: "G-DPNT9PZ61Y"
         };
 
-        // --- CẤU HÌNH DISCORD WEBHOOK ---
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
 
-        // Khởi tạo Firebase và các dịch vụ
-        const app = firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const lotsCollection = db.collection('lots');
 
-        // --- CÁC BIẾN TOÀN CỤC ---
-        let currentPage = 1;
-        const rowsPerPage = 10;
-        let allRowsData = [];
-        let filteredRowsData = [];
-        let lotCheckerInterval; // Biến lưu trữ Interval
+        // 2. BIẾN TOÀN CỤC
+        let rawLots = [];
+        let selectedIds = [];
+        let curPage = 1;
+        const pageSize = 10;
 
-        // --- CÁC HÀM XỬ LÝ ĐĂNG NHẬP FIREBASE AUTH ---
+        let viewYear = new Date().getFullYear();
+        let viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+        let maintenanceDataCache = {};
 
-        async function login() {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            const errorMessage = document.getElementById('error-message');
-            errorMessage.textContent = '';
+        const OVEN_LIST = [1,2,3,4,5,6,7];
 
-            if (!username || !password) {
-                errorMessage.textContent = 'Vui lòng nhập Tên đăng nhập và Mật khẩu.';
+        // --- CẬP NHẬT: Khởi tạo mặc định, sẽ được ghi đè từ Firebase ---
+        let ovenTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+
+        // --- HÀM GỬI DISCORD ---
+        function sendDiscordNotification(message) {
+            if(!DISCORD_WEBHOOK_URL) {
+                console.warn("Chưa cấu hình URL Discord");
                 return;
             }
 
-            const loginEmail = `${username}@lot-priority-app-shared.com`;
+            console.log("Đang gửi Discord:", message);
 
-            try {
-                await auth.signInWithEmailAndPassword(loginEmail, password);
-            } catch (error) {
-                console.error("Lỗi đăng nhập:", error.message);
-                errorMessage.textContent = 'Lỗi: Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
+            fetch(DISCORD_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: message })
+            })
+            .then(response => {
+                if(response.ok) console.log("Gửi Discord thành công");
+                else console.error("Lỗi gửi Discord:", response.status);
+            })
+            .catch(err => {
+                console.error("Lỗi mạng gửi Discord:", err);
+            });
+        }
+
+        // --- HÀM TÍNH TOÁN NGÀY THỨ 7 TUẦN 1 & 3 ---
+        function getTargetSaturdays(year, month) {
+            const dates = [];
+            const date = new Date(year, month - 1, 1);
+            let saturdayCount = 0;
+
+            while (date.getMonth() === (month - 1)) {
+                if (date.getDay() === 6) { // Thứ 7 (Saturday)
+                    saturdayCount++;
+                    if (saturdayCount === 1 || saturdayCount === 3) {
+                        dates.push(new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }));
+                    }
+                }
+                date.setDate(date.getDate() + 1);
+            }
+            return dates;
+        }
+
+        // --- HÀM TÍNH TOÁN THỐNG KÊ HOÀN THÀNH ---
+        function calculateMaintenanceStats(data, year, month) {
+            let stats = {
+                vesinhCompleted: 0,
+                profileCompleted: 0,
+                totalOvens: OVEN_LIST.length
+            };
+
+            OVEN_LIST.forEach(id => {
+                const ovenName = `Lò ${id}`;
+                // Sử dụng nhiệt độ đã được đồng bộ từ Firebase
+                const curTemp = ovenTemps[ovenName] || '850';
+
+                // Check Vệ sinh
+                let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${year}.${month}.completed`;
+                if (safeGet(data, pathVS) === true) {
+                    stats.vesinhCompleted++;
+                }
+
+                // Check Đo Profile
+                let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${year}.${month}.completed`;
+                if (safeGet(data, pathPF) === true) {
+                    stats.profileCompleted++;
+                }
+            });
+
+            return stats;
+        }
+
+        // 3. KHỞI TẠO MENU THỜI GIAN
+        function initDateControls() {
+            const selM = document.getElementById('viewMonth');
+            const selY = document.getElementById('viewYear');
+            selM.innerHTML = '';
+            for(let i=1; i<=12; i++) selM.innerHTML += `<option value="${String(i).padStart(2, '0')}">Tháng ${i}</option>`;
+            selY.innerHTML = '';
+            const currentY = new Date().getFullYear();
+            for(let i = currentY - 1; i <= currentY + 5; i++) selY.innerHTML += `<option value="${i}">Năm ${i}</option>`;
+            selM.value = viewMonth;
+            selY.value = viewYear;
+        }
+
+        // --- SỬA LỖI: Cần gọi renderMaintenanceUI để áp dụng tháng/năm mới ---
+        function jumpToNow() {
+            viewYear = new Date().getFullYear();
+            viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+            document.getElementById('viewMonth').value = viewMonth;
+            document.getElementById('viewYear').value = viewYear;
+            if (Object.keys(maintenanceDataCache).length > 0) {
+                renderMaintenanceUI(maintenanceDataCache);
+            }
+            // loadMaintenanceData() không cần thiết vì onSnapshot đã có sẵn data
+        }
+
+        // --- SỬA LỖI: Cần gọi renderMaintenanceUI để áp dụng tháng/năm mới ---
+        function changeViewDate() {
+            viewMonth = document.getElementById('viewMonth').value;
+            viewYear = document.getElementById('viewYear').value;
+            // Gọi render lại UI với dữ liệu đã cache nhưng dùng viewYear/viewMonth mới
+            if (Object.keys(maintenanceDataCache).length > 0) {
+                renderMaintenanceUI(maintenanceDataCache);
             }
         }
 
-        function logout() {
-            auth.signOut();
-            // Dừng Interval khi đăng xuất
-            if (lotCheckerInterval) {
-                clearInterval(lotCheckerInterval);
-                lotCheckerInterval = null;
-            }
-        }
-
-        // Theo dõi trạng thái đăng nhập của Firebase
+        // 4. XỬ LÝ ĐĂNG NHẬP
         auth.onAuthStateChanged(user => {
-            const loginContainer = document.getElementById('login-container');
-            const mainContent = document.getElementById('main-content');
-
             if (user) {
-                loginContainer.style.display = 'none';
-                mainContent.style.display = 'block';
-                document.getElementById('username').value = '';
-                document.getElementById('password').value = '';
-
-                // Lắng nghe dữ liệu realtime từ Firestore
-                listenForLots();
-
-                // BẮT ĐẦU CHẾ ĐỘ TỰ ĐỘNG KIỂM TRA MỖI PHÚT
-                if (!lotCheckerInterval) {
-                    lotCheckerInterval = setInterval(checkAndCompleteLots, 120000); // Chạy mỗi 60 giây (1 phút)
-                    console.log("Bắt đầu tự động kiểm tra Lot.");
-                }
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('main-app').style.display = 'block';
+                initDateControls();
+                initApp();
             } else {
-                loginContainer.style.display = 'block';
-                mainContent.style.display = 'none';
-                document.getElementById('error-message').textContent = '';
-
-                // Dừng Interval khi đăng xuất
-                if (lotCheckerInterval) {
-                    clearInterval(lotCheckerInterval);
-                    lotCheckerInterval = null;
-                    console.log("Đã dừng tự động kiểm tra Lot.");
-                }
+                document.getElementById('login-overlay').style.display = 'flex';
+                document.getElementById('main-app').style.display = 'none';
             }
         });
 
-        // --- HÀM TỰ ĐỘNG KIỂM TRA VÀ CẬP NHẬT TRẠNG THÁI (MỚI) ---
-        async function checkAndCompleteLots() {
-            // Lấy thời gian hiện tại
-            const now = new Date();
-            let completedCount = 0;
-
-            // Lọc các Lot có trạng thái 'Đang nung' VÀ có thời gian nung xong
-            const runningLots = allRowsData.filter(lot => lot.status === 'Đang nung' && lot.time);
-
-            const batch = db.batch();
-
-            runningLots.forEach(lot => {
-                // Chuyển thời gian nung xong từ chuỗi datetime-local sang đối tượng Date
-                const finishTime = new Date(lot.time);
-
-                // So sánh: Nếu thời gian nung xong <= thời gian hiện tại
-                if (finishTime <= now) {
-                    const lotRef = lotsCollection.doc(lot.id);
-                    // Cập nhật trạng thái thành "Hoàn thành"
-                    batch.update(lotRef, {
-                        status: 'Hoàn thành'
-                    });
-                    completedCount++;
-                }
-            });
-
-            if (completedCount > 0) {
-                try {
-                    await batch.commit();
-                    console.log(`Tự động hoàn thành ${completedCount} Lot.`);
-                    // Listener sẽ tự động tải lại dữ liệu và giao diện
-                } catch (error) {
-                    console.error("Lỗi khi tự động cập nhật trạng thái Lot:", error);
-                }
-            }
+        async function handleLogin() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            try { await auth.signInWithEmailAndPassword(`${u}@lot-priority-app-shared.com`, p); }
+            catch (e) { document.getElementById('login-msg').innerText = "Sai tên đăng nhập hoặc mật khẩu!"; }
         }
+        function handleLogout() { auth.signOut(); }
 
-        // --- HÀM GỬI THÔNG BÁO DISCORD ---
-        async function sendDiscordNotification(count, newProcess) {
-            if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("YOUR_WEBHOOK_ID")) {
-                console.warn("LƯU Ý: Webhook URL chưa được cài đặt hoặc không hợp lệ. Không thể gửi thông báo Discord.");
-                return;
-            }
-
-            const payload = {
-                username: "Hệ thống Ưu tiên Nung",
-                content: `🔔 CẢNH BÁO: CÓ ${count} LOT HÀNG MỚI CẦN ƯU TIÊN NUNG ở công đoạn **${newProcess}**! 🔔`
-            };
-
-            try {
-                const response = await fetch(DISCORD_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload),
+        // 5. LOGIC HỆ THỐNG CHUNG
+        function initApp() {
+            db.collection('lots').onSnapshot(snap => {
+                rawLots = [];
+                snap.forEach(doc => rawLots.push({id: doc.id, ...doc.data()}));
+                rawLots.sort((a, b) => {
+                    const score = s => s === 'Đang nung' ? 0 : (s === 'Chờ xử lý' ? 1 : 2);
+                    return score(a.status) - score(b.status) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
                 });
+                renderLotsTable();
+            });
 
-                if (response.ok) {
-                    console.log("Gửi thông báo Discord thành công.");
-                } else {
-                    console.error("Lỗi khi gửi thông báo Discord:", response.status, response.statusText);
-                }
+            // Theo dõi thay đổi của document bảo trì để cập nhật real-time
+            db.collection('maintenance').doc('schedules').onSnapshot(doc => {
+                const docData = doc.exists ? doc.data() : {};
+                maintenanceDataCache = docData;
 
-            } catch (error) {
-                console.error("Lỗi kết nối khi gửi thông báo Discord:", error);
+                // --- Đồng bộ ovenTemps từ Firebase khi có thay đổi ---
+                const defaultTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+                ovenTemps = docData.ovenTemps ? { ...defaultTemps, ...docData.ovenTemps } : defaultTemps;
+
+                if (!maintenanceDataCache.ovens) maintenanceDataCache.ovens = {};
+                if (!maintenanceDataCache.dakuto) maintenanceDataCache.dakuto = {};
+
+                renderMaintenanceUI(maintenanceDataCache);
+            }, (error) => {
+                console.error("Lỗi lắng nghe Firebase:", error);
+                document.getElementById('maintenanceError').style.display = 'block';
+                document.getElementById('maintenanceLoading').style.display = 'none';
+            });
+
+            checkConveyorReminder();
+        }
+
+        // --- Hàm tải dữ liệu bảo trì thủ công (chỉ dùng để set default nếu chưa có) ---
+        async function loadMaintenanceData() {
+            const docRef = db.collection('maintenance').doc('schedules');
+            const doc = await docRef.get();
+
+            if (!doc.exists || !doc.data().ovenTemps) {
+                // Nếu chưa có trên DB, dùng mặc định và lưu lên DB lần đầu
+                await docRef.set({ ovenTemps: ovenTemps }, { merge: true });
             }
         }
 
-        // --- CÁC HÀM XỬ LÝ FIRESTORE (CRUD & Realtime) VÀ HIỂN THỊ ---
 
-        function getSortOrder(status) {
-            if (status === 'Đang nung') return 0;
-            if (status === 'Chờ xử lý') return 1;
-            return 2;
-        }
+        // --- KIỂM TRA NHẮC NHỞ BĂNG TẢI (Thứ 6 báo trước 1 ngày) ---
+        function checkConveyorReminder() {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 5=Fri
+            if (dayOfWeek !== 5) return;
 
-        function sortLotsData(data) {
-            return data.sort((a, b) => {
-                const sortOrderA = getSortOrder(a.status);
-                const sortOrderB = getSortOrder(b.status);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            const weekOfMonth = Math.ceil(tomorrow.getDate() / 7);
 
-                if (sortOrderA !== sortOrderB) {
-                    return sortOrderA - sortOrderB;
+            if (weekOfMonth === 1 || weekOfMonth === 3) {
+                const todayStr = today.toISOString().split('T')[0];
+                const lastSent = localStorage.getItem('discord_conveyor_sent');
+
+                if (lastSent !== todayStr) {
+                    sendDiscordNotification(`⚠️ **NHẮC NHỞ BẢO TRÌ:**\nNgày mai (Thứ 7 - Tuần ${weekOfMonth}) là lịch **Đo tốc độ băng tải**. Vui lòng chuẩn bị!`);
+                    localStorage.setItem('discord_conveyor_sent', todayStr);
                 }
-
-                if (a.time && b.time) {
-                    const timeA = new Date(a.time).getTime();
-                    const timeB = new Date(b.time).getTime();
-
-                    if (sortOrderA < 2) {
-                        return timeA - timeB;
-                    }
-                    return timeB - timeA;
-                }
-
-                const createdAtA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
-                const createdAtB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
-
-                return createdAtB - createdAtA;
-            });
+            }
         }
 
-        function listenForLots() {
-            lotsCollection.onSnapshot(snapshot => {
-                const lots = [];
-                snapshot.forEach(doc => {
-                    lots.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
-                });
+        function renderLotsTable() {
+            const tbody = document.getElementById('lotTableBody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
 
-                allRowsData = sortLotsData(lots);
-                filterTable(true);
-            }, error => {
-                console.error("Lỗi khi lắng nghe Firestore:", error);
-                alert("Không thể tải dữ liệu Lot. Vui lòng kiểm tra kết nối.");
-            });
-        }
+            const total = filtered.length;
+            const pages = Math.ceil(total / pageSize) || 1;
+            if (curPage > pages) curPage = pages;
+            const start = (curPage - 1) * pageSize;
+            const displayLots = filtered.slice(start, start + pageSize);
 
-        function renderTable() {
-            const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '';
-            const totalPages = Math.ceil(filteredRowsData.length / rowsPerPage);
-            const start = (currentPage - 1) * rowsPerPage;
-            const end = start + rowsPerPage;
+            tbody.innerHTML = '';
+            displayLots.forEach((item, idx) => {
+                const stClass = item.status === 'Đang nung' ? 'st-running' : (item.status === 'Hoàn thành' ? 'st-done' : 'st-pending');
+                const isChecked = selectedIds.includes(item.id) ? 'checked' : '';
 
-            const rowsToDisplay = filteredRowsData.slice(start, end);
-
-            const defaultStatusClass = {
-                'Chờ xử lý': 'status-pending',
-                'Đang nung': 'status-in-progress',
-                'Hoàn thành': 'status-completed'
-            };
-
-            rowsToDisplay.forEach((data, index) => {
-                const newRow = document.createElement('tr');
-                tableBody.appendChild(newRow);
-
-                const statusClass = defaultStatusClass[data.status] || 'status-pending';
-
-                newRow.innerHTML = `
-                    <td>${start + index + 1}</td>
-                    <td contenteditable="true" data-type="lot" data-id="${data.id}">${data.lot}</td>
-                    <td contenteditable="true" data-type="keijo" data-id="${data.id}">${data.keijo}</td>
-                    <td contenteditable="true" data-type="resistance" data-id="${data.id}">${data.resistance}</td>
+                const row = `<tr>
+                    <td><input type="checkbox" ${isChecked} onchange="toggleOne('${item.id}')"></td>
+                    <td>${start + idx + 1}</td>
+                    <td contenteditable="true" onblur="updateCell('${item.id}', 'lot', this)">${item.lot}</td>
+                    <td contenteditable="true" onblur="updateCell('${item.id}', 'keijo', this)">${item.keijo}</td>
+                    <td contenteditable="true" onblur="updateCell('${item.id}', 'resistance', this)">${item.resistance}</td>
                     <td>
-                        <select class="status-select ${statusClass}" onchange="changeStatus(this, '${data.id}')">
-                            <option value="Chờ xử lý" ${data.status === 'Chờ xử lý' ? 'selected' : ''}>Chờ xử lý</option>
-                            <option value="Đang nung" ${data.status === 'Đang nung' ? 'selected' : ''}>Đang nung</option>
-                            <option value="Hoàn thành" ${data.status === 'Hoàn thành' ? 'selected' : ''}>Hoàn thành</option>
+                        <select class="status-select ${stClass}" onchange="changeStatus('${item.id}', this)">
+                            <option value="Chờ xử lý" ${item.status==='Chờ xử lý'?'selected':''}>Chờ xử lý</option>
+                            <option value="Đang nung" ${item.status==='Đang nung'?'selected':''}>Đang nung</option>
+                            <option value="Hoàn thành" ${item.status==='Hoàn thành'?'selected':''}>Hoàn thành</option>
                         </select>
                     </td>
-                    <td><input type="datetime-local" class="time-input" value="${data.time || ''}" onchange="updateLotField(this, 'time', '${data.id}')"></td>
-                    <td contenteditable="true" data-type="process" data-id="${data.id}">${data.process}</td>
-                    <td><button class="delete-btn" onclick="deleteLot('${data.id}')">Xóa</button></td>
-                `;
-
-                const editableCells = newRow.querySelectorAll('td[contenteditable="true"]');
-                editableCells.forEach(cell => {
-                    cell.addEventListener('blur', () => {
-                        const field = cell.dataset.type;
-                        const newValue = cell.textContent;
-                        updateLotField(cell, field, data.id, newValue);
-                    });
-                });
+                    <td><input type="datetime-local" value="${item.time || ''}" onchange="updateCell('${item.id}', 'time', this)"></td>
+                    <td contenteditable="true" onblur="updateCell('${item.id}', 'process', this)">${item.process}</td>
+                    <td contenteditable="true" onblur="updateCell('${item.id}', 'note', this)">${item.note || ''}</td>
+                    <td><button class="btn btn-danger" style="padding: 4px 8px;" onclick="deleteLot('${item.id}')">Xóa</button></td>
+                </tr>`;
+                tbody.insertAdjacentHTML('beforeend', row);
             });
 
-            document.getElementById('pageInfo').textContent = `Trang ${currentPage} / ${totalPages > 0 ? totalPages : 1}`;
-            document.getElementById('prevBtn').disabled = currentPage === 1 || totalPages <= 1;
-            document.getElementById('nextBtn').disabled = currentPage === totalPages || totalPages <= 1;
+            document.getElementById('pagingInfo').innerText = `Trang ${curPage}/${pages}`;
+            document.getElementById('btnDeleteMulti').style.display = selectedIds.length > 0 ? 'inline-block' : 'none';
+            document.getElementById('btnDeleteMulti').innerText = `Xóa (${selectedIds.length})`;
         }
 
-        async function updateLotField(element, field, id, value = element.value) {
-            try {
-                const updatedValue = (field === 'lot') ? String(value).toUpperCase() : value;
-
-                await lotsCollection.doc(id).update({
-                    [field]: updatedValue
-                });
-            } catch (error) {
-                console.error("Lỗi khi cập nhật Firestore:", error);
-                alert("Không thể cập nhật dữ liệu.");
-            }
+        // 6. CÁC HÀM THAO TÁC LOT
+        function updateCell(id, field, el) {
+            let val = el.value !== undefined ? el.value : el.innerText;
+            if(field === 'lot') val = val.toUpperCase();
+            db.collection('lots').doc(id).update({ [field]: val });
         }
-
-        async function changeStatus(selectElement, id) {
-            const newStatus = selectElement.value;
-            updateStatusClass(selectElement, newStatus);
-
-            const row = selectElement.closest('tr');
-            const timeInput = row.cells[5].querySelector('.time-input');
-            let timeValue = timeInput.value;
-
-            // Tự động tính thời gian nung nếu chuyển sang 'Đang nung' và chưa có thời gian
-            if (newStatus === 'Đang nung' && !timeValue) {
-                timeValue = calculateFinishTime();
+        function changeStatus(id, el) {
+            const st = el.value;
+            let updateData = { status: st };
+            if(st === 'Đang nung') {
+                const d = new Date(); d.setMinutes(d.getMinutes() + 105);
+                const iso = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
+                updateData.time = iso;
             }
-
-            try {
-                await lotsCollection.doc(id).update({
-                    status: newStatus,
-                    time: timeValue
-                });
-            } catch (error) {
-                console.error("Lỗi khi cập nhật trạng thái:", error);
-                alert("Không thể cập nhật trạng thái Lot.");
-            }
+            db.collection('lots').doc(id).update(updateData);
         }
+        function toggleAddForm() { const f = document.getElementById('add-lot-form'); f.style.display = f.style.display === 'block' ? 'none' : 'block'; }
 
-        async function addNewLot() {
-            const lotData = document.getElementById('newLotData').value;
-            const newProcess = document.getElementById('newProcess').value;
-
-            if (!lotData || !newProcess) {
-                alert('Vui lòng điền đủ dữ liệu Lot (Lot, Keijo, Điện trở) và chọn Công đoạn!');
-                return;
-            }
-
-            const lines = lotData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        async function submitNewLots() {
+            const raw = document.getElementById('inputLotData').value;
+            const proc = document.getElementById('inputProcess').value;
+            if(!raw || !proc) return alert("Thiếu dữ liệu!");
             const batch = db.batch();
-
+            const lines = raw.split('\n');
             let count = 0;
             lines.forEach(line => {
-                const columns = line.split(/\s+/).filter(col => col.length > 0);
-
-                if (columns.length >= 3) {
-                    const lot = columns[0].toUpperCase();
-                    const keijo = columns[1];
-                    const resistance = columns[2];
-
-                    const newLotRef = lotsCollection.doc();
-
-                    batch.set(newLotRef, {
-                        lot: lot,
-                        keijo: keijo,
-                        resistance: resistance,
-                        status: 'Chờ xử lý',
-                        time: '',
-                        process: newProcess,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                const parts = line.trim().split(/\s+/);
+                if(parts.length >= 3) {
+                    const ref = db.collection('lots').doc();
+                    batch.set(ref, { lot: parts[0].toUpperCase(), keijo: parts[1], resistance: parts[2], process: proc, status: 'Chờ xử lý', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
                     count++;
                 }
             });
-
-            if (count === 0) {
-                alert('Không tìm thấy dữ liệu Lot hợp lệ (Lot, Keijo, Điện trở). Vui lòng kiểm tra lại định dạng!');
-                return;
-            }
-
-            try {
+            if(count > 0) {
                 await batch.commit();
 
-                sendDiscordNotification(count, newProcess);
+                // --- GỬI DISCORD KHI CÓ LOT MỚI ---
+                sendDiscordNotification(`🆕 **Đã thêm ${count} Lot mới!**\nCông đoạn: **${proc}**`);
 
-                toggleForm();
-                alert(`Thêm thành công ${count} Lot mới!`);
-            } catch (error) {
-                console.error("Lỗi khi thêm Lot vào Firestore:", error);
-                alert("Không thể thêm Lot mới. Vui lòng thử lại.");
+                alert(`Đã thêm ${count} lot.`);
+                document.getElementById('inputLotData').value = '';
+                toggleAddForm();
+            } else { alert("Không đọc được dòng nào hợp lệ!"); }
+        }
+
+        async function deleteLot(id) { if(await confirmPass()) db.collection('lots').doc(id).delete(); }
+        async function deleteSelected() {
+            if(selectedIds.length === 0) return;
+            if(await confirmPass()) {
+                const batch = db.batch();
+                selectedIds.forEach(id => batch.delete(db.collection('lots').doc(id)));
+                await batch.commit();
+                selectedIds = [];
+                renderLotsTable();
             }
         }
+        async function confirmPass() {
+            if(!auth.currentUser) return false;
+            const p = prompt("Nhập mật khẩu để xác nhận xóa:");
+            if(!p) return false;
+            try { const cred = firebase.auth.EmailAuthProvider.credential(auth.currentUser.email, p); await auth.currentUser.reauthenticateWithCredential(cred); return true; } catch { alert("Sai mật khẩu!"); return false; }
+        }
+        function toggleOne(id) { if(selectedIds.includes(id)) selectedIds = selectedIds.filter(x => x !== id); else selectedIds.push(id); renderLotsTable(); }
+        function toggleSelectAll() {
+            const chk = document.getElementById('checkAll').checked;
+            if(chk) {
+                const search = document.getElementById('searchInput').value.toLowerCase();
+                const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search));
+                const start = (curPage - 1) * pageSize;
+                const pageIds = filtered.slice(start, start + pageSize).map(l => l.id);
+                selectedIds = [...new Set([...selectedIds, ...pageIds])];
+            } else { selectedIds = []; }
+            renderLotsTable();
+        }
+        function prevPage() { if(curPage > 1) { curPage--; renderLotsTable(); } }
+        function nextPage() { curPage++; renderLotsTable(); }
 
-        async function deleteLot(id) {
-            if (!confirm('Bạn có chắc chắn muốn xóa Lot này không?')) return;
-
-            try {
-                await lotsCollection.doc(id).delete();
-            } catch (error) {
-                console.error("Lỗi khi xóa Lot:", error);
-                alert("Không thể xóa Lot. Vui lòng thử lại.");
-            }
+        // 7. HỆ THỐNG BẢO TRÌ (THU GỌN + GHI CHÚ)
+        function safeGet(obj, path) {
+            return path.split('.').reduce((acc, part) => acc && acc[part], obj);
         }
 
-        function calculateFinishTime() {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() + 105); // Cộng 105 phút (1h45')
-            const pad = (num) => (num < 10 ? '0' : '') + num;
-            const year = now.getFullYear();
-            const month = pad(now.getMonth() + 1);
-            const day = pad(now.getDate());
-            const hour = pad(now.getHours());
-            const minute = pad(now.getMinutes());
+        // --- CẬP NHẬT: Thay thế localStorage bằng Firebase ---
+        async function changeOvenTemp(ovenName, newTemp) {
+            ovenTemps[ovenName] = newTemp;
 
-            return `${year}-${month}-${day}T${hour}:${minute}`;
+            // Cập nhật lên Firebase
+            await db.collection('maintenance').doc('schedules').update({
+                [`ovenTemps.${ovenName}`]: newTemp
+            });
+            // onSnapshot trong initApp sẽ tự động render lại UI cho tất cả máy
         }
 
-        function updateStatusClass(selectElement, status) {
-            selectElement.className = 'status-select';
-            if (status === 'Chờ xử lý') {
-                selectElement.classList.add('status-pending');
-            } else if (status === 'Đang nung') {
-                selectElement.classList.add('status-in-progress');
-            } else if (status === 'Hoàn thành') {
-                selectElement.classList.add('status-completed');
-            }
-        }
+        function renderMaintenanceUI(data) {
+            const container = document.getElementById('maintenanceContent');
+            const uiLoading = document.getElementById('maintenanceLoading');
+            const uiContent = document.getElementById('maintenanceContent');
 
-        function filterTable(resetPage = true) {
-            const searchValue = document.getElementById('searchInput').value.toLowerCase();
+            uiLoading.style.display = 'none';
+            uiContent.style.display = 'block';
 
-            filteredRowsData = allRowsData.filter(data => {
-                const lot = data.lot ? data.lot.toLowerCase() : '';
-                const keijo = data.keijo ? data.keijo.toLowerCase() : '';
-                return lot.includes(searchValue) || keijo.includes(searchValue);
+            let html = `<p style="font-style:italic; color:#666; margin-bottom:10px;">Đang xem dữ liệu: <b>Tháng ${viewMonth} / Năm ${viewYear}</b></p>`;
+
+            html += `<table class="maintenance-table">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Thiết bị</th>
+                        <th style="width: 100px;">Nhiệt độ</th>
+                        <th>Vệ sinh (850 1T/LẦN)</th>
+                        <th>Đo Profile (3T/LẦN)</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            // 1. RENDER LÒ - LOGIC THU GỌN
+            OVEN_LIST.forEach(id => {
+                const ovenName = `Lò ${id}`;
+                // Lấy nhiệt độ đã đồng bộ
+                const curTemp = ovenTemps[ovenName] || '850';
+
+                // Lấy dữ liệu
+                let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${viewYear}.${viewMonth}`;
+                let itemVS = safeGet(data, pathVS) || { completed: false, date: null };
+
+                let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${viewYear}.${viewMonth}`;
+                let itemPF = safeGet(data, pathPF) || { completed: false, date: null };
+
+                // Lấy ghi chú
+                let pathNote = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
+                let noteContent = safeGet(data, pathNote) || "";
+
+                html += `<tr>
+                    <td style="font-weight:bold; background:#f9f9f9;">${ovenName}</td>
+                    <td>
+                        <select onchange="changeOvenTemp('${ovenName}', this.value)">
+                            <option value="850" ${curTemp=='850'?'selected':''}>850°C</option>
+                            <option value="600" ${curTemp=='600'?'selected':''}>600°C</option>
+                        </select>
+                    </td>
+
+                    <td>
+                        <div class="task-cell">
+                            <input type="checkbox" ${itemVS.completed ? 'checked' : ''}
+                                onchange="toggleMaint('${pathVS}', this.checked)">
+                            <input type="date" class="${itemVS.completed ? '' : 'hidden-date'}"
+                                value="${itemVS.date || ''}" onchange="updateMaintDate('${pathVS}', this.value)">
+                        </div>
+                    </td>
+
+                    <td>
+                        <div class="task-cell">
+                            <input type="checkbox" ${itemPF.completed ? 'checked' : ''}
+                                onchange="toggleMaint('${pathPF}', this.checked)">
+                            <input type="date" class="${itemPF.completed ? '' : 'hidden-date'}"
+                                value="${itemPF.date || ''}" onchange="updateMaintDate('${pathPF}', this.value)">
+                        </div>
+                    </td>
+
+                    <td>
+                        <input type="text" class="note-input" value="${noteContent}"
+                            placeholder="Nhập ghi chú..." onblur="updateOvenNote('${ovenName}', this.value)">
+                    </td>
+                </tr>`;
             });
 
-            if (resetPage) {
-                currentPage = 1;
-            }
-            renderTable();
+            // 2. Dakuto & Băng tải
+            let dPath6 = `dakuto.${viewYear}.06`;
+            let item6 = safeGet(data, dPath6) || { completed: false, date: null };
+            let dPath12 = `dakuto.${viewYear}.12`;
+            let item12 = safeGet(data, dPath12) || { completed: false, date: null };
+
+            // Tính toán ngày đo băng tải
+            const targetSaturdays = getTargetSaturdays(parseInt(viewYear), parseInt(viewMonth));
+            const saturdayDisplay = targetSaturdays.length > 0 ? targetSaturdays.join(', ') : 'Không có';
+
+            // Tính toán thống kê
+            const stats = calculateMaintenanceStats(data, viewYear, viewMonth);
+
+            html += `<tr style="border-top: 2px solid #ccc; background:#f0f8ff;">
+                <td colspan="2" style="font-weight:bold;">KHÁC</td>
+                <td>
+                    <div style="font-weight:bold; margin-bottom:5px;">Vệ sinh Dakuto (T6 & T12)</div>
+                    <div class="task-cell" style="margin-bottom:5px;">
+                        <span>T6:</span>
+                        <input type="checkbox" ${item6.completed?'checked':''} onchange="toggleMaint('${dPath6}', this.checked)">
+                        <input type="date" class="${item6.completed?'':'hidden-date'}" value="${item6.date||''}" onchange="updateMaintDate('${dPath6}', this.value)">
+                    </div>
+                    <div class="task-cell">
+                        <span>T12:</span>
+                        <input type="checkbox" ${item12.completed?'checked':''} onchange="toggleMaint('${dPath12}', this.checked)">
+                        <input type="date" class="${item12.completed?'':'hidden-date'}" value="${item12.date||''}" onchange="updateMaintDate('${dPath12}', this.value)">
+                    </div>
+                </td>
+                <td style="background:#fff3cd; border: 1px solid #ffc107;">
+                    <div style="font-weight:bold; margin-bottom:5px; color: #856404;">LỊCH ĐO BĂNG TẢI</div>
+                    <div>Thứ 7 tuần 1 & 3 của tháng ${viewMonth}:</div>
+                    <div style="font-weight:bold; color: var(--primary); font-size: 16px;">${saturdayDisplay}</div>
+                </td>
+
+                <td style="background:#e9f7ef; border: 1px solid #28a745; color: #155724;">
+                    <div style="font-weight:bold; margin-bottom:5px;">THỐNG KÊ HOÀN THÀNH</div>
+                    <div>Vệ sinh: <b>${stats.vesinhCompleted} / ${stats.totalOvens}</b> Lò</div>
+                    <div>Đo Profile: <b>${stats.profileCompleted} / ${stats.totalOvens}</b> Lò</div>
+                </td>
+            </tr>`;
+
+            html += `</tbody></table>`;
+            container.innerHTML = html;
         }
 
-        function changePage(direction) {
-            const totalPages = Math.ceil(filteredRowsData.length / rowsPerPage);
-            currentPage += direction;
-            if (currentPage < 1) currentPage = 1;
-            if (currentPage > totalPages) currentPage = totalPages;
-            renderTable();
+        async function toggleMaint(path, checked) {
+            const today = new Date().toISOString().slice(0,10);
+
+            // Xây dựng object update cho Firebase (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11)
+            const parts = path.split('.');
+            let updateObject = {};
+            // Lấy 4 phần đầu tiên (ví dụ: ovens.Lò 1.850.Vệ sinh)
+            let basePath = parts.slice(0, 4).join('.');
+            // Thêm phần năm và tháng để tạo path cuối cùng (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11)
+            let fullPath = `${basePath}.${viewYear}.${viewMonth}`;
+
+            updateObject[fullPath] = { completed: checked, date: checked ? today : null };
+
+            await db.collection('maintenance').doc('schedules').update(updateObject);
+            // onSnapshot sẽ tự động kích hoạt renderMaintenanceUI
         }
 
-        function toggleForm() {
-            const form = document.getElementById('addForm');
-            form.style.display = form.style.display === 'none' || form.style.display === '' ? 'block' : 'none';
-            if (form.style.display === 'block') {
-                document.getElementById('newLotData').value = '';
-                document.getElementById('newProcess').value = '';
-            }
+        async function updateMaintDate(path, newDate) {
+            // Xây dựng path đầy đủ bao gồm năm và tháng (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11.date)
+            let fullPath = `${path}.${viewYear}.${viewMonth}.date`;
+            await db.collection('maintenance').doc('schedules').update({ [fullPath]: newDate });
         }
 
-        // HÀM KHỞI TẠO
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('password').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    login();
-                }
-            });
-        });
+        async function updateOvenNote(ovenName, content) {
+            const path = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
+            await db.collection('maintenance').doc('schedules').update({ [path]: content });
+        }
+
+        async function hardResetMaintenance() {
+            if(!confirm("CẢNH BÁO: Dữ liệu cũ sẽ bị mất. Bạn có chắc không?")) return;
+            await db.collection('maintenance').doc('schedules').delete();
+            // Khởi tạo lại dữ liệu mặc định
+            await db.collection('maintenance').doc('schedules').set({ ovenTemps: ovenTemps });
+            // Sau khi xóa và set lại, onSnapshot sẽ tự động kích hoạt render lại UI
+        }
+
     </script>
 </body>
 </html>
