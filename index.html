@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Lot & Bảo Trì - Final Version</title>
+    <title>Quản Lý Lot & Bảo Trì - Fixed Version</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <style>
         /* --- GIAO DIỆN CƠ BẢN --- */
         :root {
@@ -33,7 +36,7 @@
         .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
         .search-box { padding: 8px; border: 1px solid var(--border); border-radius: 4px; width: 300px; }
 
-        /* --- BẢNG DỮ LIỆU --- */
+        /* --- BẢNG DỮ LIỆU LOT --- */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
         th { background: var(--primary); color: white; text-transform: uppercase; font-size: 13px; }
@@ -69,615 +72,1786 @@
         /* --- TIỆN ÍCH --- */
         .loading { text-align: center; padding: 20px; color: #666; font-style: italic; }
         .error-display { color: red; background: #ffe6e6; padding: 10px; border-radius: 4px; margin: 10px 0; display: none; }
+
+        /* --- PHẦN SẢN LƯỢNG MỚI (Đã cập nhật) --- */
+        .production-section { margin-top: 40px; border-top: 2px dashed #007bff; padding-top: 20px; }
+        .prod-input-group input, .prod-input-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* FIX CÂN ĐỐI BỐ CỤC 3 BẢNG (ĐÃ CẬP NHẬT ĐỂ TÁCH BIỆT RÕ RÀNG) */
+        #productionStatsContainer {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+        }
+        #productionStatsContainer > div {
+             flex: 1 1 100%;
+             min-width: 300px;
+             padding: 15px;
+             border-radius: 8px;
+             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+             background: white;
+             display: flex;
+             flex-direction: column;
+             margin-bottom: 20px;
+        }
+
+        /* Bảng thống kê mới */
+        .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        /* Tăng padding cho cột mới */
+        .stats-table th, .stats-table td { border: 1px solid #ddd; padding: 6px 8px; font-size: 13px; text-align: right; }
+        .stats-table th { background: #e9f7ef; font-weight: bold; text-align: center; }
+        .stats-table .person-col { text-align: left; font-weight: bold; background: #f8f9fa; }
+        .stats-table .total-col { background: #fff3cd; font-weight: bold; color: #856404; }
+        .stats-table .grand-total-row th { background: var(--success); color: white; text-align: right; }
+        .stats-table .grand-total-row td { background: var(--success); color: white; font-weight: bold; }
+
+        /* Cập nhật màu sắc cho các cột công đoạn */
+        .process-cell {
+            font-weight: bold;
+            text-align: right;
+            transition: background-color 0.3s;
+            color: #333;
+        }
+        .color-UC { background-color: #e6f7ff !important; } /* Light Blue */
+        .color-C { background-color: #f0fff0 !important; } /* Light Green */
+        .color-R { background-color: #fff4e6 !important; } /* Light Orange */
+        .color-T1 { background-color: #f7e6ff !important; } /* Light Purple */
+        .color-T2 { background-color: #ffe6e6 !important; } /* Light Red */
+        .color-T3 { background-color: #e6ffe6 !important; } /* Dark Green */
+        .color-CLF { background-color: #f3f3f3 !important; } /* Light Gray */
+        .color-G1 { background-color: #f0f0ff !important; } /* Indigo */
+        .color-GH { background-color: #fffae6 !important; } /* Gold */
+        .color-default { background-color: #f5f5f5 !important; }
     </style>
 </head>
 <body>
 
-    <div id="login-overlay">
-        <div class="login-box">
-            <h2>Đăng Nhập</h2>
-            <input type="text" id="username" placeholder="Tên đăng nhập">
-            <input type="password" id="password" placeholder="Mật khẩu">
-            <button onclick="handleLogin()">VÀO HỆ THỐNG</button>
-            <p id="login-msg" style="color: red; font-size: 13px; margin-top: 10px;"></p>
+<div id="login-overlay">
+    <div class="login-box">
+        <h2>Đăng Nhập</h2>
+        <input type="text" id="username" placeholder="Tên đăng nhập">
+        <input type="password" id="password" placeholder="Mật khẩu">
+        <button id="login-btn">VÀO HỆ THỐNG</button>
+        <p id="login-msg" style="color: red; font-size: 13px; margin-top: 10px;"></p>
+    </div>
+</div>
+
+<div id="main-app">
+    <header>
+        <h1>QUẢN LÝ LOT ƯU TIÊN</h1>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-danger" id="logout-btn">Đăng xuất</button>
+        </div>
+    </header>
+
+    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+        <input type="text" class="search-box" id="searchInput" placeholder="Tìm số Lot hoặc Keijo..."
+               onkeyup="renderLotsTable()">
+        <div>
+            <button class="btn btn-danger" id="btnDeleteMulti" onclick="deleteSelected()"
+                    style="display:none; margin-right: 10px;">Xóa đã chọn
+            </button>
+            <button class="btn btn-success" onclick="toggleAddForm()">+ Thêm Lot Mới</button>
         </div>
     </div>
 
-    <div id="main-app">
-        <header>
-            <h1>QUẢN LÝ LOT ƯU TIÊN</h1>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn btn-danger" onclick="handleLogout()">Đăng xuất</button>
-            </div>
-        </header>
+    <div id="add-lot-form">
+        <h3>Thêm nhanh (Copy từ Excel)</h3>
+        <textarea id="inputLotData"
+                  placeholder="Dán dữ liệu: Lot  Keijo  ĐiệnTrở (Mỗi dòng 1 lot) VD: CKP6A0000 Z18 332"></textarea>
+        <select id="inputProcess" style="padding: 8px; width: 200px; margin-bottom: 10px;">
+            <option value="">-- Chọn Công Đoạn --</option>
+            <option value="UC">UC</option>
+            <option value="C">C</option>
+            <option value="R">R</option>
+            <option value="T1">T1</option>
+            <option value="CLF">CLF</option>
+            <option value="T2">T2</option>
+            <option value="T3">T3</option>
+            <option value="G1">G1</option>
+            <option value="GH">GH</option>
+        </select>
+        <br>
+        <button class="btn btn-primary" onclick="submitNewLots()">Lưu Dữ Liệu</button>
+        <button class="btn btn-danger" onclick="toggleAddForm()">Hủy</button>
+    </div>
 
-        <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-            <input type="text" class="search-box" id="searchInput" placeholder="Tìm số Lot hoặc Keijo..." onkeyup="renderLotsTable()">
-            <div>
-                <button class="btn btn-danger" id="btnDeleteMulti" onclick="deleteSelected()" style="display:none; margin-right: 10px;">Xóa đã chọn</button>
-                <button class="btn btn-success" onclick="toggleAddForm()">+ Thêm Lot Mới</button>
+    <table>
+        <thead>
+        <tr>
+            <th style="width: 40px;"><input type="checkbox" id="checkAll" onchange="toggleSelectAll()"></th>
+            <th>STT</th>
+            <th>Lot</th>
+            <th>Keijo</th>
+            <th>Điện trở</th>
+            <th>Trạng thái</th>
+            <th>Giờ ra lò</th>
+            <th>Công đoạn</th>
+            <th>Ghi chú</th>
+            <th>Hành động</th>
+        </tr>
+        </thead>
+        <tbody id="lotTableBody"></tbody>
+    </table>
+
+    <div style="margin-top: 15px; text-align: right;">
+        <span id="pagingInfo"></span>
+        <button class="btn btn-primary" onclick="prevPage()"> <</button>
+        <button class="btn btn-primary" onclick="nextPage()"> ></button>
+    </div>
+
+    <div class="maintenance-section">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2>🛠 LỊCH SỬ BẢO TRÌ</h2>
+
+            <div class="maintenance-controls">
+                <span>Xem dữ liệu:</span>
+                <select id="viewMonth" onchange="changeViewDate()"></select>
+                <select id="viewYear" onchange="changeViewDate()"></select>
+                <button class="btn btn-outline" onclick="jumpToNow()">Về hiện tại</button>
             </div>
         </div>
 
-        <div id="add-lot-form">
-            <h3>Thêm nhanh (Copy từ Excel)</h3>
-            <textarea id="inputLotData" placeholder="Dán dữ liệu: Lot  Keijo  ĐiệnTrở (Mỗi dòng 1 lot) VD: CKP6A0000 Z18 332"></textarea>
-            <select id="inputProcess" style="padding: 8px; width: 200px; margin-bottom: 10px;">
-                <option value="">-- Chọn Công Đoạn --</option>
-                <option value="UC">UC</option><option value="C">C</option><option value="R">R</option>
-                <option value="T1">T1</option><option value="CLF">CLF</option><option value="T2">T2</option>
-                <option value="T3">T3</option><option value="G1">G1</option><option value="GH">GH</option>
-            </select>
-            <br>
-            <button class="btn btn-primary" onclick="submitNewLots()">Lưu Dữ Liệu</button>
-            <button class="btn btn-danger" onclick="toggleAddForm()">Hủy</button>
+        <div id="maintenanceError" class="error-display">
+            Có lỗi tải dữ liệu.
+            <button class="btn btn-danger" onclick="hardResetMaintenance()">Khôi phục dữ liệu gốc</button>
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 40px;"><input type="checkbox" id="checkAll" onchange="toggleSelectAll()"></th>
-                    <th>STT</th>
-                    <th>Lot</th>
-                    <th>Keijo</th>
-                    <th>Điện trở</th>
-                    <th>Trạng thái</th>
-                    <th>Giờ ra lò</th>
-                    <th>Công đoạn</th>
-                    <th>Ghi chú</th>
-                    <th>Hành động</th>
-                </tr>
-            </thead>
-            <tbody id="lotTableBody"></tbody>
-        </table>
-
-        <div style="margin-top: 15px; text-align: right;">
-            <span id="pagingInfo"></span>
-            <button class="btn btn-primary" onclick="prevPage()"> < </button>
-            <button class="btn btn-primary" onclick="nextPage()"> > </button>
-        </div>
-
-        <div class="maintenance-section">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>🛠 LỊCH SỬ BẢO TRÌ</h2>
-
-                <div class="maintenance-controls">
-                    <span>Xem dữ liệu:</span>
-                    <select id="viewMonth" onchange="changeViewDate()"></select>
-                    <select id="viewYear" onchange="changeViewDate()"></select>
-                    <button class="btn btn-outline" onclick="jumpToNow()">Về hiện tại</button>
-                </div>
-            </div>
-
-            <div id="maintenanceError" class="error-display">
-                Có lỗi tải dữ liệu. <button class="btn btn-danger" onclick="hardResetMaintenance()">Khôi phục dữ liệu gốc</button>
-            </div>
-
-            <div id="maintenanceLoading" class="loading">⏳ Đang tải dữ liệu bảo trì...</div>
-            <div id="maintenanceContent" style="display: none;">
-                </div>
+        <div id="maintenanceLoading" class="loading">⏳ Đang tải dữ liệu bảo trì...</div>
+        <div id="maintenanceContent" style="display: none;">
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <div class="production-section">
+        <h2>📈 PHÂN TÍCH SẢN LƯỢNG THEO CÔNG ĐOẠN (Đơn vị: Tấm)</h2>
+        <div style="padding: 15px; border: 1px solid var(--primary); border-radius: 8px; background: #f0f8ff;">
 
-    <script>
-        // 1. CẤU HÌNH FIREBASE & DISCORD
-        const firebaseConfig = {
-            apiKey: "AIzaSyCn866gY_3OiB_VL0fUDMe3ZCdhYDRbIJ8",
-            authDomain: "lot-priority-app-shared.firebaseapp.com",
-            projectId: "lot-priority-app-shared",
-            storageBucket: "lot-priority-app-shared.firebasestorage.app",
-            messagingSenderId: "12749059268",
-            appId: "1:12749059268:web:e1aa877135d8741461c591",
-            measurementId: "G-DPNT9PZ61Y"
+            <p style="font-weight: bold; margin-bottom: 10px;">Bước 1: Cấu Hình Cột (Ký tự cột phải tương ứng giữa 2
+                file)</p>
+            <div class="prod-input-group"
+                 style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center; margin-bottom: 15px;">
+                <label>Cột Sản Lượng:</label>
+                <input type="text" id="colProdInput" placeholder="Ký tự cột (ví dụ: H)" value="H" style="width: 130px;">
+
+                <label>Cột Người TH:</label>
+                <input type="text" id="colPersonInput" placeholder="Ký tự cột (ví dụ: R)" value="R"
+                       style="width: 130px;">
+
+                <label>Cột Công Đoạn:</label>
+                <input type="text" id="colProcessInput" placeholder="Ký tự cột (ví dụ: B)" value="B"
+                       style="width: 130px;">
+
+                <label>Cột Ngày Tháng:</label>
+                <input type="text" id="colDateInput" placeholder="Ký tự cột (ví dụ: A)" value="A" style="width: 130px;">
+
+                <label>Dòng Tiêu Đề (Số dòng):</label>
+                <input type="number" id="headerRowInput" placeholder="VD: 3" value="3" min="1" style="width: 130px;">
+            </div>
+
+            <hr style="margin: 15px 0; border-top: 1px dashed #ccc;">
+
+            <p style="font-weight: bold; margin-bottom: 10px;">Bước 2: Tải File (Có thể chọn nhiều file cùng lúc)</p>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1; border: 1px dashed green; padding: 10px; border-radius: 5px;">
+                    <label style="font-weight: bold; color: green;">File Đầu VÀO (IN):</label>
+                    <input type="file" id="inputFileInput" onchange="handleFileSelection(event, 'IN')" multiple>
+                    <div id="fileList_IN" style="font-size: 12px; margin-top: 5px; color: #555;">Chưa chọn file.</div>
+                </div>
+                <div style="flex: 1; border: 1px dashed blue; padding: 10px; border-radius: 5px;">
+                    <label style="font-weight: bold; color: blue;">File Đầu RA (OUT):</label>
+                    <input type="file" id="outputFileInput" onchange="handleFileSelection(event, 'OUT')" multiple>
+                    <div id="fileList_OUT" style="font-size: 12px; margin-top: 5px; color: #555;">Chưa chọn file.</div>
+                </div>
+            </div>
+
+            <div id="excelError" style="color: var(--danger); margin-top: 10px; font-weight: bold;"></div>
+
+            <hr style="margin: 15px 0; border-top: 1px dashed #ccc;">
+
+            <p style="font-weight: bold; margin-bottom: 10px;">Bước 3: Tính Toán & Xuất Báo Cáo</p>
+            <div class="prod-input-group" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                <label>Tháng/Năm Cần Tính:</label>
+                <select id="prodMonth" style="width: 80px;"></select>
+                <select id="prodYear" style="width: 100px;"></select>
+
+                <label>Tên Người:</label>
+                <select id="personSelect" style="width: 150px;">
+                    <option value="all">-- Tất Cả Mọi Người --</option>
+                </select>
+
+                <button class="btn btn-success" onclick="calculateProduction()">💰 TÍNH TỔNG SẢN LƯỢNG</button>
+                <button class="btn btn-primary" id="exportBtn" onclick="exportToExcel()" style="display: none;">📊 XUẤT
+                    FILE EXCEL
+                </button>
+                <button class="btn btn-primary" id="captureBtn" onclick="captureAndDownloadStats()"
+                        style="display: none;">📸 CHỤP ẢNH KẾT QUẢ
+                </button>
+            </div>
+        </div>
+
+        <div id="productionStatsContainer" style="display: none;">
+        </div>
+    </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+<script>
+    // 1. CẤU HÌNH FIREBASE & DISCORD
+   const firebaseConfig = {
+     apiKey: "AIzaSyCn866gY_3OiB_VL0fUDMe3ZCdhYDRbIJ8",
+     authDomain: "lot-priority-app-shared.firebaseapp.com",
+     projectId: "lot-priority-app-shared",
+     storageBucket: "lot-priority-app-shared.firebasestorage.app",
+     messagingSenderId: "12749059268",
+     appId: "1:12749059268:web:e1aa877135d8741461c591",
+     measurementId: "G-DPNT9PZ61Y"
+   };
+
+    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // 2. BIẾN TOÀN CỤC
+    let rawLots = [];
+    let selectedIds = [];
+    let curPage = 1;
+    const pageSize = 10;
+
+    let viewYear = new Date().getFullYear();
+    let viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+    let maintenanceDataCache = {};
+
+    // BIẾN CHO SẢN LƯỢNG
+    let inputFiles = []; // Danh sách file Đầu VÀO
+    let outputFiles = []; // Danh sách file Đầu RA
+    let allInputData = []; // Dữ liệu đã combine của Đầu VÀO
+    let allOutputData = []; // Dữ liệu đã combine của Đầu RA
+
+    let inputColMap = {}; // Map ký tự cột (A, B) với tên Header cho file IN
+    let outputColMap = {}; // Map ký tự cột (A, B) với tên Header cho file OUT
+    let processList = new Set(); // Danh sách công đoạn duy nhất
+
+    // Map process name to a specific color class
+    const PROCESS_COLORS = {
+        'UC': 'color-UC', 'C': 'color-C', 'R': 'color-R', 'T1': 'color-T1',
+        'CLF': 'color-CLF', 'T2': 'color-T2', 'T3': 'color-T3', 'G1': 'color-G1', 'GH': 'color-GH',
+    };
+    function getColorClass(processName) {
+        if (!processName) return 'color-default';
+        const key = processName.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return PROCESS_COLORS[key] || 'color-default';
+    }
+
+    const OVEN_LIST = [1,2,3,4,5,6,7];
+    let ovenTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+
+    // --- HÀM GỬI DISCORD ---
+    function sendDiscordNotification(message) {
+        if(!DISCORD_WEBHOOK_URL) {
+            console.warn("Chưa cấu hình URL Discord");
+            return;
+        }
+
+        console.log("Đang gửi Discord:", message);
+
+        fetch(DISCORD_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: message })
+        })
+        .then(response => {
+            if(response.ok) console.log("Gửi Discord thành công");
+            else console.error("Lỗi gửi Discord:", response.status);
+        })
+        .catch(err => {
+            console.error("Lỗi mạng gửi Discord:", err);
+        });
+    }
+
+    // --- HÀM TÍNH TOÁN NGÀY THỨ 7 TUẦN 1 & 3 ---
+    function getTargetSaturdays(year, month) {
+        const dates = [];
+        const date = new Date(year, month - 1, 1);
+        let saturdayCount = 0;
+
+        while (date.getMonth() === (month - 1)) {
+            if (date.getDay() === 6) { // Thứ 7 (Saturday)
+                saturdayCount++;
+                if (saturdayCount === 1 || saturdayCount === 3) {
+                    dates.push(new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }));
+                }
+            }
+            date.setDate(date.getDate() + 1);
+        }
+        return dates;
+    }
+
+    // --- HÀM TÍNH TOÁN THỐNG KÊ HOÀN THÀNH ---
+    function calculateMaintenanceStats(data, year, month) {
+        let stats = {
+            vesinhCompleted: 0,
+            profileCompleted: 0,
+            totalOvens: OVEN_LIST.length
         };
 
-        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
+        OVEN_LIST.forEach(id => {
+            const ovenName = `Lò ${id}`;
+            const curTemp = ovenTemps[ovenName] || '850';
 
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        // 2. BIẾN TOÀN CỤC
-        let rawLots = [];
-        let selectedIds = [];
-        let curPage = 1;
-        const pageSize = 10;
-
-        let viewYear = new Date().getFullYear();
-        let viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-        let maintenanceDataCache = {};
-
-        const OVEN_LIST = [1,2,3,4,5,6,7];
-
-        // --- CẬP NHẬT: Khởi tạo mặc định, sẽ được ghi đè từ Firebase ---
-        let ovenTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
-
-        // --- HÀM GỬI DISCORD ---
-        function sendDiscordNotification(message) {
-            if(!DISCORD_WEBHOOK_URL) {
-                console.warn("Chưa cấu hình URL Discord");
-                return;
+            // Check Vệ sinh
+            let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${year}.${month}.completed`;
+            if (safeGet(data, pathVS) === true) {
+                stats.vesinhCompleted++;
             }
 
-            console.log("Đang gửi Discord:", message);
-
-            fetch(DISCORD_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: message })
-            })
-            .then(response => {
-                if(response.ok) console.log("Gửi Discord thành công");
-                else console.error("Lỗi gửi Discord:", response.status);
-            })
-            .catch(err => {
-                console.error("Lỗi mạng gửi Discord:", err);
-            });
-        }
-
-        // --- HÀM TÍNH TOÁN NGÀY THỨ 7 TUẦN 1 & 3 ---
-        function getTargetSaturdays(year, month) {
-            const dates = [];
-            const date = new Date(year, month - 1, 1);
-            let saturdayCount = 0;
-
-            while (date.getMonth() === (month - 1)) {
-                if (date.getDay() === 6) { // Thứ 7 (Saturday)
-                    saturdayCount++;
-                    if (saturdayCount === 1 || saturdayCount === 3) {
-                        dates.push(new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }));
-                    }
-                }
-                date.setDate(date.getDate() + 1);
-            }
-            return dates;
-        }
-
-        // --- HÀM TÍNH TOÁN THỐNG KÊ HOÀN THÀNH ---
-        function calculateMaintenanceStats(data, year, month) {
-            let stats = {
-                vesinhCompleted: 0,
-                profileCompleted: 0,
-                totalOvens: OVEN_LIST.length
-            };
-
-            OVEN_LIST.forEach(id => {
-                const ovenName = `Lò ${id}`;
-                // Sử dụng nhiệt độ đã được đồng bộ từ Firebase
-                const curTemp = ovenTemps[ovenName] || '850';
-
-                // Check Vệ sinh
-                let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${year}.${month}.completed`;
-                if (safeGet(data, pathVS) === true) {
-                    stats.vesinhCompleted++;
-                }
-
-                // Check Đo Profile
-                let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${year}.${month}.completed`;
-                if (safeGet(data, pathPF) === true) {
-                    stats.profileCompleted++;
-                }
-            });
-
-            return stats;
-        }
-
-        // 3. KHỞI TẠO MENU THỜI GIAN
-        function initDateControls() {
-            const selM = document.getElementById('viewMonth');
-            const selY = document.getElementById('viewYear');
-            selM.innerHTML = '';
-            for(let i=1; i<=12; i++) selM.innerHTML += `<option value="${String(i).padStart(2, '0')}">Tháng ${i}</option>`;
-            selY.innerHTML = '';
-            const currentY = new Date().getFullYear();
-            for(let i = currentY - 1; i <= currentY + 5; i++) selY.innerHTML += `<option value="${i}">Năm ${i}</option>`;
-            selM.value = viewMonth;
-            selY.value = viewYear;
-        }
-
-        // --- SỬA LỖI: Cần gọi renderMaintenanceUI để áp dụng tháng/năm mới ---
-        function jumpToNow() {
-            viewYear = new Date().getFullYear();
-            viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-            document.getElementById('viewMonth').value = viewMonth;
-            document.getElementById('viewYear').value = viewYear;
-            if (Object.keys(maintenanceDataCache).length > 0) {
-                renderMaintenanceUI(maintenanceDataCache);
-            }
-            // loadMaintenanceData() không cần thiết vì onSnapshot đã có sẵn data
-        }
-
-        // --- SỬA LỖI: Cần gọi renderMaintenanceUI để áp dụng tháng/năm mới ---
-        function changeViewDate() {
-            viewMonth = document.getElementById('viewMonth').value;
-            viewYear = document.getElementById('viewYear').value;
-            // Gọi render lại UI với dữ liệu đã cache nhưng dùng viewYear/viewMonth mới
-            if (Object.keys(maintenanceDataCache).length > 0) {
-                renderMaintenanceUI(maintenanceDataCache);
-            }
-        }
-
-        // 4. XỬ LÝ ĐĂNG NHẬP
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('main-app').style.display = 'block';
-                initDateControls();
-                initApp();
-            } else {
-                document.getElementById('login-overlay').style.display = 'flex';
-                document.getElementById('main-app').style.display = 'none';
+            // Check Đo Profile
+            let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${year}.${month}.completed`;
+            if (safeGet(data, pathPF) === true) {
+                stats.profileCompleted++;
             }
         });
 
-        async function handleLogin() {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-            try { await auth.signInWithEmailAndPassword(`${u}@lot-priority-app-shared.com`, p); }
-            catch (e) { document.getElementById('login-msg').innerText = "Sai tên đăng nhập hoặc mật khẩu!"; }
-        }
-        function handleLogout() { auth.signOut(); }
+        return stats;
+    }
 
-        // 5. LOGIC HỆ THỐNG CHUNG
-        function initApp() {
-            db.collection('lots').onSnapshot(snap => {
-                rawLots = [];
-                snap.forEach(doc => rawLots.push({id: doc.id, ...doc.data()}));
-                rawLots.sort((a, b) => {
-                    const score = s => s === 'Đang nung' ? 0 : (s === 'Chờ xử lý' ? 1 : 2);
-                    return score(a.status) - score(b.status) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+    // 3. KHỞI TẠO MENU THỜI GIAN (ĐÃ SỬA: MỞ RỘNG PHẠM VI NĂM)
+
+    // --- THAY THẾ HÀM KHỞI TẠO DATE CONTROLS ---
+     async function loadUserMaintSettings(user) {
+         try {
+              const docRef = db.collection('user_settings').doc(user.uid);
+              const doc = await docRef.get();
+              if (doc.exists && doc.data().maintView) {
+                 // Cập nhật biến toàn cục với giá trị đã lưu
+                 viewMonth = doc.data().maintView.month || viewMonth;
+                 viewYear = doc.data().maintView.year || viewYear;
+              }
+         } catch (e) {
+             console.error("Lỗi tải ngày xem bảo trì:", e);
+         }
+         // Phải gọi initDateControls SAU khi đã có dữ liệu từ Firebase
+         initDateControls();
+    }
+
+    function initDateControls() {
+       // viewMonth và viewYear đã được thiết lập bởi loadUserMaintSettings hoặc mặc định
+
+        const selM = document.getElementById('viewMonth');
+        const selY = document.getElementById('viewYear');
+
+        selM.innerHTML = '';
+        for(let i=1; i<=12; i++) selM.innerHTML += `<option value="${String(i).padStart(2, '0')}">Tháng ${i}</option>`;
+
+        selY.innerHTML = '';
+        const currentY = new Date().getFullYear();
+        for(let i = currentY - 1; i <= currentY + 50; i++) selY.innerHTML += `<option value="${i}">Năm ${i}</option>`;
+
+        // Gán lại giá trị viewMonth/viewYear đã được lấy từ Firebase (hoặc mặc định)
+        selM.value = viewMonth;
+        selY.value = viewYear;
+    }
+
+    // --- HÀM KHỞI TẠO CONTROL CHO SẢN LƯỢNG (ĐÃ SỬA: MỞ RỘNG PHẠM VI NĂM) ---
+    function initProdDateControls() {
+        const selM = document.getElementById('prodMonth');
+        const selY = document.getElementById('prodYear');
+        const currentY = new Date().getFullYear();
+        const currentM = String(new Date().getMonth() + 1).padStart(2, '0');
+        const maxFutureYear = currentY + 50; // Phạm vi vô tận (50 năm)
+
+        selM.innerHTML = '';
+        for(let i=1; i<=12; i++) selM.innerHTML += `<option value="${String(i).padStart(2, '0')}">T${i}</option>`;
+
+        selY.innerHTML = '';
+        // Thay đổi phạm vi năm: Hiện tại đến Hiện tại + 50 (Mô phỏng "Vô Tận")
+        for(let i = currentY; i <= maxFutureYear; i++) {
+            selY.innerHTML += `<option value="${i}">Năm ${i}</option>`;
+        }
+
+        selM.value = currentM;
+        // Đặt năm mặc định là năm hiện tại
+        selY.value = currentY;
+    }
+
+    function jumpToNow() {
+        viewYear = new Date().getFullYear();
+        viewMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+        document.getElementById('viewMonth').value = viewMonth;
+        document.getElementById('viewYear').value = viewYear;
+
+       // THAY ĐỔI: LƯU VÀO FIREBASE
+       const user = auth.currentUser;
+       if (user) {
+            db.collection('user_settings').doc(user.uid).set({
+                maintView: { month: viewMonth, year: viewYear }
+            }, { merge: true }).catch(e => console.error("Lỗi lưu cài đặt Firebase:", e));
+       }
+
+       if (Object.keys(maintenanceDataCache).length > 0) renderMaintenanceUI(maintenanceDataCache);
+    }
+
+    function changeViewDate() {
+        viewMonth = document.getElementById('viewMonth').value;
+        viewYear = document.getElementById('viewYear').value;
+
+       // THAY ĐỔI: LƯU VÀO FIREBASE
+       const user = auth.currentUser;
+       if (user) {
+           db.collection('user_settings').doc(user.uid).set({
+              maintView: { month: viewMonth, year: viewYear }
+           }, { merge: true }).catch(e => console.error("Lỗi lưu cài đặt Firebase:", e));
+       }
+
+       if (Object.keys(maintenanceDataCache).length > 0) renderMaintenanceUI(maintenanceDataCache);
+    }
+
+    // 4. XỬ LÝ ĐĂNG NHẬP & NOTIFICATION DISCORD
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('main-app').style.display = 'block';
+
+            // --- LOGIC THÔNG BÁO DISCORD KHI ĐĂNG NHẬP ---
+            // Sử dụng sessionStorage để đảm bảo chỉ thông báo 1 lần mỗi phiên làm việc (tránh F5 spam)
+            if (!sessionStorage.getItem('logged_in_session')) {
+                const statsRef = db.collection('system_stats').doc('login_counter');
+
+                // Sử dụng Atomic Increment để tăng biến đếm an toàn
+                statsRef.set({
+                    count: firebase.firestore.FieldValue.increment(1),
+                    last_login: firebase.firestore.FieldValue.serverTimestamp()
+                }, { merge: true })
+                .then(() => statsRef.get())
+                .then(doc => {
+                    const count = doc.data().count;
+                    const email = user.email ? user.email.split('@')[0] : "User";
+
+                    // Gửi thông báo Discord
+                    sendDiscordNotification(`🔔 **THÔNG BÁO ĐĂNG NHẬP**\n👤 User: **${email}**\n🔢 Lượt đăng nhập hệ thống thứ: **${count}**\n🕒 Thời gian: ${new Date().toLocaleString('vi-VN')}`);
+
+                    // Đánh dấu đã thông báo trong phiên này
+                    sessionStorage.setItem('logged_in_session', 'true');
+                })
+                .catch(err => {
+                    console.error("Lỗi cập nhật thống kê đăng nhập:", err);
                 });
-                renderLotsTable();
+            }
+            // --- KẾT THÚC LOGIC DISCORD ---
+
+            loadUserMaintSettings(user).then(() => {
+               initProdDateControls();
+               initApp();
             });
+        } else {
+            document.getElementById('login-overlay').style.display = 'flex';
+            document.getElementById('main-app').style.display = 'none';
+            sessionStorage.removeItem('logged_in_session'); // Reset cờ khi đăng xuất
+        }
+    });
 
-            // Theo dõi thay đổi của document bảo trì để cập nhật real-time
-            db.collection('maintenance').doc('schedules').onSnapshot(doc => {
-                const docData = doc.exists ? doc.data() : {};
-                maintenanceDataCache = docData;
+    // Hàm gọi khi bấm nút đăng nhập
+    async function handleLogin() {
+        const u = document.getElementById('username').value.trim();
+        const p = document.getElementById('password').value;
+        const msgEl = document.getElementById('login-msg');
+        msgEl.innerText = ''; // Xóa thông báo cũ
 
-                // --- Đồng bộ ovenTemps từ Firebase khi có thay đổi ---
-                const defaultTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
-                ovenTemps = docData.ovenTemps ? { ...defaultTemps, ...docData.ovenTemps } : defaultTemps;
-
-                if (!maintenanceDataCache.ovens) maintenanceDataCache.ovens = {};
-                if (!maintenanceDataCache.dakuto) maintenanceDataCache.dakuto = {};
-
-                renderMaintenanceUI(maintenanceDataCache);
-            }, (error) => {
-                console.error("Lỗi lắng nghe Firebase:", error);
-                document.getElementById('maintenanceError').style.display = 'block';
-                document.getElementById('maintenanceLoading').style.display = 'none';
-            });
-
-            checkConveyorReminder();
+        if (!u || !p) {
+            msgEl.innerText = "❌ Vui lòng nhập đủ Tên đăng nhập và Mật khẩu.";
+            return;
         }
 
-        // --- Hàm tải dữ liệu bảo trì thủ công (chỉ dùng để set default nếu chưa có) ---
-        async function loadMaintenanceData() {
-            const docRef = db.collection('maintenance').doc('schedules');
-            const doc = await docRef.get();
-
-            if (!doc.exists || !doc.data().ovenTemps) {
-                // Nếu chưa có trên DB, dùng mặc định và lưu lên DB lần đầu
-                await docRef.set({ ovenTemps: ovenTemps }, { merge: true });
+        try {
+            // Tự động thêm domain email để đăng nhập
+            await auth.signInWithEmailAndPassword(`${u}@lot-priority-app-shared.com`, p);
+        }
+        catch (e) {
+            console.error("Lỗi Đăng nhập:", e.code, e.message);
+            if (e.code === 'auth/wrong-password') {
+                msgEl.innerText = "❌ Sai mật khẩu. Vui lòng thử lại.";
+            } else if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email') {
+                msgEl.innerText = "❌ Tên đăng nhập không tồn tại. Vui lòng kiểm tra lại.";
+            } else {
+                msgEl.innerText = "❌ Lỗi không xác định. Kiểm tra Console (F12) để biết chi tiết.";
             }
         }
+    }
+    // Hàm gọi khi bấm nút đăng xuất
+    function handleLogout() { auth.signOut(); }
 
-
-        // --- KIỂM TRA NHẮC NHỞ BĂNG TẢI (Thứ 6 báo trước 1 ngày) ---
-        function checkConveyorReminder() {
-            const today = new Date();
-            const dayOfWeek = today.getDay(); // 5=Fri
-            if (dayOfWeek !== 5) return;
-
-            const tomorrow = new Date(today);
-            tomorrow.setDate(today.getDate() + 1);
-            const weekOfMonth = Math.ceil(tomorrow.getDate() / 7);
-
-            if (weekOfMonth === 1 || weekOfMonth === 3) {
-                const todayStr = today.toISOString().split('T')[0];
-                const lastSent = localStorage.getItem('discord_conveyor_sent');
-
-                if (lastSent !== todayStr) {
-                    sendDiscordNotification(`⚠️ **NHẮC NHỞ BẢO TRÌ:**\nNgày mai (Thứ 7 - Tuần ${weekOfMonth}) là lịch **Đo tốc độ băng tải**. Vui lòng chuẩn bị!`);
-                    localStorage.setItem('discord_conveyor_sent', todayStr);
-                }
-            }
-        }
-
-        function renderLotsTable() {
-            const tbody = document.getElementById('lotTableBody');
-            const search = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
-
-            const total = filtered.length;
-            const pages = Math.ceil(total / pageSize) || 1;
-            if (curPage > pages) curPage = pages;
-            const start = (curPage - 1) * pageSize;
-            const displayLots = filtered.slice(start, start + pageSize);
-
-            tbody.innerHTML = '';
-            displayLots.forEach((item, idx) => {
-                const stClass = item.status === 'Đang nung' ? 'st-running' : (item.status === 'Hoàn thành' ? 'st-done' : 'st-pending');
-                const isChecked = selectedIds.includes(item.id) ? 'checked' : '';
-
-                const row = `<tr>
-                    <td><input type="checkbox" ${isChecked} onchange="toggleOne('${item.id}')"></td>
-                    <td>${start + idx + 1}</td>
-                    <td contenteditable="true" onblur="updateCell('${item.id}', 'lot', this)">${item.lot}</td>
-                    <td contenteditable="true" onblur="updateCell('${item.id}', 'keijo', this)">${item.keijo}</td>
-                    <td contenteditable="true" onblur="updateCell('${item.id}', 'resistance', this)">${item.resistance}</td>
-                    <td>
-                        <select class="status-select ${stClass}" onchange="changeStatus('${item.id}', this)">
-                            <option value="Chờ xử lý" ${item.status==='Chờ xử lý'?'selected':''}>Chờ xử lý</option>
-                            <option value="Đang nung" ${item.status==='Đang nung'?'selected':''}>Đang nung</option>
-                            <option value="Hoàn thành" ${item.status==='Hoàn thành'?'selected':''}>Hoàn thành</option>
-                        </select>
-                    </td>
-                    <td><input type="datetime-local" value="${item.time || ''}" onchange="updateCell('${item.id}', 'time', this)"></td>
-                    <td contenteditable="true" onblur="updateCell('${item.id}', 'process', this)">${item.process}</td>
-                    <td contenteditable="true" onblur="updateCell('${item.id}', 'note', this)">${item.note || ''}</td>
-                    <td><button class="btn btn-danger" style="padding: 4px 8px;" onclick="deleteLot('${item.id}')">Xóa</button></td>
-                </tr>`;
-                tbody.insertAdjacentHTML('beforeend', row);
+    // 5. LOGIC HỆ THỐNG CHUNG
+    function initApp() {
+        db.collection('lots').onSnapshot(snap => {
+            rawLots = [];
+            snap.forEach(doc => rawLots.push({id: doc.id, ...doc.data()}));
+            rawLots.sort((a, b) => {
+                const score = s => s === 'Đang nung' ? 0 : (s === 'Chờ xử lý' ? 1 : 2);
+                return score(a.status) - score(b.status) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
             });
+            renderLotsTable();
+        });
 
-            document.getElementById('pagingInfo').innerText = `Trang ${curPage}/${pages}`;
-            document.getElementById('btnDeleteMulti').style.display = selectedIds.length > 0 ? 'inline-block' : 'none';
-            document.getElementById('btnDeleteMulti').innerText = `Xóa (${selectedIds.length})`;
-        }
+        db.collection('maintenance').doc('schedules').onSnapshot(doc => {
+            const docData = doc.exists ? doc.data() : {};
+            maintenanceDataCache = docData;
 
-        // 6. CÁC HÀM THAO TÁC LOT
-        function updateCell(id, field, el) {
-            let val = el.value !== undefined ? el.value : el.innerText;
-            if(field === 'lot') val = val.toUpperCase();
-            db.collection('lots').doc(id).update({ [field]: val });
-        }
-        function changeStatus(id, el) {
-            const st = el.value;
-            let updateData = { status: st };
-            if(st === 'Đang nung') {
-                const d = new Date(); d.setMinutes(d.getMinutes() + 105);
-                const iso = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
-                updateData.time = iso;
+            const defaultTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+            ovenTemps = docData.ovenTemps ? { ...defaultTemps, ...docData.ovenTemps } : defaultTemps;
+
+            if (!maintenanceDataCache.ovens) maintenanceDataCache.ovens = {};
+            if (!maintenanceDataCache.dakuto) maintenanceDataCache.dakuto = {};
+
+            renderMaintenanceUI(maintenanceDataCache);
+        }, (error) => {
+            console.error("Lỗi lắng nghe Firebase:", error);
+            document.getElementById('maintenanceError').style.display = 'block';
+            document.getElementById('maintenanceLoading').style.display = 'none';
+        });
+
+        // --- RESET BIẾN CẤU HÌNH VÀ DỮ LIỆU CHO PHẦN SẢN LƯỢNG KHI KHỞI TẠO APP ---
+        inputColMap = {};
+        outputColMap = {};
+        allInputData = [];
+        allOutputData = [];
+        inputFiles = [];
+        outputFiles = [];
+        processList = new Set();
+        // --- HẾT RESET ---
+
+        checkConveyorReminder();
+        initProdDateControls();
+        // Khởi tạo hiển thị trạng thái file
+        document.getElementById('fileList_IN').innerHTML = '<span style="color:red;">Chưa chọn file.</span>';
+        document.getElementById('fileList_OUT').innerHTML = '<span style="color:red;">Chưa chọn file.</span>';
+    }
+
+
+    // --- KIỂM TRA NHẮC NHỞ BĂNG TẢI (Thứ 6 báo trước 1 ngày) ---
+    function checkConveyorReminder() {
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 5=Fri
+        if (dayOfWeek !== 5) return;
+
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const weekOfMonth = Math.ceil(tomorrow.getDate() / 7);
+
+        if (weekOfMonth === 1 || weekOfMonth === 3) {
+            const todayStr = today.toISOString().split('T')[0];
+            const lastSent = localStorage.getItem('discord_conveyor_sent');
+
+            if (lastSent !== todayStr) {
+                sendDiscordNotification(`⚠️ **NHẮC NHỞ BẢO TRÌ:**\nNgày mai (Thứ 7 - Tuần ${weekOfMonth}) là lịch **Đo tốc độ băng tải**. Vui lòng chuẩn bị!`);
+                localStorage.setItem('discord_conveyor_sent', todayStr);
             }
-            db.collection('lots').doc(id).update(updateData);
         }
-        function toggleAddForm() { const f = document.getElementById('add-lot-form'); f.style.display = f.style.display === 'block' ? 'none' : 'block'; }
+    }
 
-        async function submitNewLots() {
-            const raw = document.getElementById('inputLotData').value;
-            const proc = document.getElementById('inputProcess').value;
-            if(!raw || !proc) return alert("Thiếu dữ liệu!");
+    function renderLotsTable() {
+        const tbody = document.getElementById('lotTableBody');
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
+
+        const total = filtered.length;
+        const pages = Math.ceil(total / pageSize) || 1;
+        if (curPage > pages) curPage = pages;
+        const start = (curPage - 1) * pageSize;
+        const displayLots = filtered.slice(start, start + pageSize);
+
+        tbody.innerHTML = '';
+        displayLots.forEach((item, idx) => {
+            const stClass = item.status === 'Đang nung' ? 'st-running' : (item.status === 'Chờ xử lý' ? 'st-pending' : 'st-done');
+            const isChecked = selectedIds.includes(item.id) ? 'checked' : '';
+
+            const row = `<tr>
+                <td><input type="checkbox" ${isChecked} onchange="toggleOne('${item.id}')"></td>
+                <td>${start + idx + 1}</td>
+                <td contenteditable="true" onblur="updateCell('${item.id}', 'lot', this)">${item.lot}</td>
+                <td contenteditable="true" onblur="updateCell('${item.id}', 'keijo', this)">${item.keijo}</td>
+                <td contenteditable="true" onblur="updateCell('${item.id}', 'resistance', this)">${item.resistance}</td>
+                <td>
+                    <select class="status-select ${stClass}" onchange="changeStatus('${item.id}', this)">
+                        <option value="Chờ xử lý" ${item.status==='Chờ xử lý'?'selected':''}>Chờ xử lý</option>
+                        <option value="Đang nung" ${item.status==='Đang nung'?'selected':''}>Đang nung</option>
+                        <option value="Hoàn thành" ${item.status==='Hoàn thành'?'selected':''}>Hoàn thành</option>
+                    </select>
+                </td>
+                <td><input type="datetime-local" value="${item.time || ''}" onchange="updateCell('${item.id}', 'time', this)"></td>
+                <td contenteditable="true" onblur="updateCell('${item.id}', 'process', this)">${item.process}</td>
+                <td contenteditable="true" onblur="updateCell('${item.id}', 'note', this)">${item.note || ''}</td>
+                <td><button class="btn btn-danger" style="padding: 4px 8px;" onclick="deleteLot('${item.id}')">Xóa</button></td>
+            </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+
+        document.getElementById('pagingInfo').innerText = `Trang ${curPage}/${pages}`;
+        document.getElementById('btnDeleteMulti').style.display = selectedIds.length > 0 ? 'inline-block' : 'none';
+        document.getElementById('btnDeleteMulti').innerText = `Xóa (${selectedIds.length})`;
+    }
+
+    // 6. CÁC HÀM THAO TÁC LOT
+    function updateCell(id, field, el) {
+        let val = el.value !== undefined ? el.value : el.innerText;
+        if(field === 'lot') val = val.toUpperCase();
+        db.collection('lots').doc(id).update({ [field]: val });
+    }
+
+    function changeStatus(id, el) {
+        const st = el.value;
+        let updateData = { status: st };
+        if(st === 'Đang nung') {
+            const d = new Date();
+            d.setMinutes(d.getMinutes() + 105);
+            const iso = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
+            updateData.time = iso;
+        }
+        db.collection('lots').doc(id).update(updateData);
+    }
+
+    function toggleAddForm() {
+        const f = document.getElementById('add-lot-form');
+        f.style.display = f.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function submitNewLots() {
+        const raw = document.getElementById('inputLotData').value;
+        const proc = document.getElementById('inputProcess').value;
+        if(!raw || !proc) return alert("Thiếu dữ liệu!");
+
+        const batch = db.batch();
+        const lines = raw.split('\n');
+        let count = 0;
+        lines.forEach(line => {
+            const parts = line.trim().split(/\s+/);
+            if(parts.length >= 3) {
+                const ref = db.collection('lots').doc();
+                batch.set(ref, {
+                    lot: parts[0].toUpperCase(),
+                    keijo: parts[1],
+                    resistance: parts[2],
+                    process: proc,
+                    status: 'Chờ xử lý',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                count++;
+            }
+        });
+
+        if(count > 0) {
+            await batch.commit();
+            // Đã xóa gửi Discord ở đây theo yêu cầu
+            alert(`Đã thêm ${count} lot.`);
+            document.getElementById('inputLotData').value = '';
+            toggleAddForm();
+        } else {
+            alert("Không đọc được dòng nào hợp lệ!");
+        }
+    }
+
+    // --- CẬP NHẬT: SỬA LỖI XÓA LOT ---
+    async function confirmPass() {
+          const user = auth.currentUser;
+          // Kiểm tra xem người dùng có đang đăng nhập không
+          if (!user) {
+            alert("❌ Lỗi: Bạn chưa đăng nhập. Vui lòng thử lại.");
+             return false;
+          }
+
+        // Yêu cầu nhập mật khẩu đăng nhập
+        const pass = prompt("Nhập MẬT KHẨU để xóa:");
+        if (!pass) {
+            alert("❌ Đã hủy.");
+            return false;
+        }
+
+       try {
+               const email = user.email; // Lấy email của người dùng hiện tại
+
+               // 1. Tạo thông tin xác thực từ email và mật khẩu vừa nhập
+              const credential = firebase.auth.EmailAuthProvider.credential(email, pass);
+
+              // 2. Yêu cầu Firebase xác thực lại (re-authenticate) người dùng
+              // Thao tác này sẽ thành công nếu mật khẩu khớp, và thất bại nếu sai.
+              await user.reauthenticateWithCredential(credential);
+
+              console.log("Xác thực mật khẩu thành công. Đang tiến hành xóa.");
+              return true; // Mật khẩu đúng
+       }catch (e) {
+               console.error("Lỗi xác thực lại:", e.code, e.message);
+               let msg = "❌ Lỗi không xác định. Vui lòng kiểm tra Console (F12).";
+
+               if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+               msg = "❌ Mật khẩu không đúng. Vui lòng kiểm tra lại.";
+               }
+
+               alert(msg);
+               return false; // Mật khẩu sai hoặc có lỗi
+       }
+    }
+
+    async function deleteLot(id) {
+        if(await confirmPass()) {
+            db.collection('lots').doc(id).delete()
+            .then(() => {
+                console.log("Xóa thành công: " + id);
+            })
+            .catch((error) => {
+                console.error("Lỗi xóa document: ", error);
+                alert("❌ Lỗi: Không thể xóa dữ liệu. Vui lòng kiểm tra quyền truy cập.");
+            });
+        }
+    }
+
+    async function deleteSelected() {
+        if(selectedIds.length === 0) return;
+        if(await confirmPass()) {
             const batch = db.batch();
-            const lines = raw.split('\n');
-            let count = 0;
-            lines.forEach(line => {
-                const parts = line.trim().split(/\s+/);
-                if(parts.length >= 3) {
-                    const ref = db.collection('lots').doc();
-                    batch.set(ref, { lot: parts[0].toUpperCase(), keijo: parts[1], resistance: parts[2], process: proc, status: 'Chờ xử lý', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-                    count++;
-                }
+            selectedIds.forEach(id => {
+                batch.delete(db.collection('lots').doc(id));
             });
-            if(count > 0) {
-                await batch.commit();
-
-                // --- GỬI DISCORD KHI CÓ LOT MỚI ---
-                sendDiscordNotification(`🆕 **Đã thêm ${count} Lot mới!**\nCông đoạn: **${proc}**`);
-
-                alert(`Đã thêm ${count} lot.`);
-                document.getElementById('inputLotData').value = '';
-                toggleAddForm();
-            } else { alert("Không đọc được dòng nào hợp lệ!"); }
-        }
-
-        async function deleteLot(id) { if(await confirmPass()) db.collection('lots').doc(id).delete(); }
-        async function deleteSelected() {
-            if(selectedIds.length === 0) return;
-            if(await confirmPass()) {
-                const batch = db.batch();
-                selectedIds.forEach(id => batch.delete(db.collection('lots').doc(id)));
-                await batch.commit();
+            batch.commit()
+            .then(() => {
+                sendDiscordNotification(`🗑️ **Đã xóa ${selectedIds.length} Lot khỏi hệ thống!**`);
                 selectedIds = [];
                 renderLotsTable();
-            }
+            })
+            .catch((error) => {
+                console.error("Lỗi xóa hàng loạt: ", error);
+                alert("❌ Lỗi: Không thể xóa hàng loạt. Vui lòng thử lại.");
+            });
         }
-        async function confirmPass() {
-            if(!auth.currentUser) return false;
-            const p = prompt("Nhập mật khẩu để xác nhận xóa:");
-            if(!p) return false;
-            try { const cred = firebase.auth.EmailAuthProvider.credential(auth.currentUser.email, p); await auth.currentUser.reauthenticateWithCredential(cred); return true; } catch { alert("Sai mật khẩu!"); return false; }
+    }
+
+    function toggleSelectAll() {
+        const isChecked = document.getElementById('checkAll').checked;
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
+
+        selectedIds = [];
+        if(isChecked) {
+            filtered.forEach(l => selectedIds.push(l.id));
         }
-        function toggleOne(id) { if(selectedIds.includes(id)) selectedIds = selectedIds.filter(x => x !== id); else selectedIds.push(id); renderLotsTable(); }
-        function toggleSelectAll() {
-            const chk = document.getElementById('checkAll').checked;
-            if(chk) {
-                const search = document.getElementById('searchInput').value.toLowerCase();
-                const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search));
-                const start = (curPage - 1) * pageSize;
-                const pageIds = filtered.slice(start, start + pageSize).map(l => l.id);
-                selectedIds = [...new Set([...selectedIds, ...pageIds])];
-            } else { selectedIds = []; }
+        renderLotsTable();
+    }
+
+    function toggleOne(id) {
+        const index = selectedIds.indexOf(id);
+        if(index > -1) {
+            selectedIds.splice(index, 1);
+        } else {
+            selectedIds.push(id);
+        }
+        // Cập nhật trạng thái CheckAll
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
+        document.getElementById('checkAll').checked = selectedIds.length === filtered.length && filtered.length > 0;
+
+        renderLotsTable();
+    }
+
+    function prevPage() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
+        const pages = Math.ceil(filtered.length / pageSize) || 1;
+        if(curPage > 1) {
+            curPage--;
             renderLotsTable();
         }
-        function prevPage() { if(curPage > 1) { curPage--; renderLotsTable(); } }
-        function nextPage() { curPage++; renderLotsTable(); }
+    }
 
-        // 7. HỆ THỐNG BẢO TRÌ (THU GỌN + GHI CHÚ)
-        function safeGet(obj, path) {
-            return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    function nextPage() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = rawLots.filter(l => (l.lot||'').toLowerCase().includes(search) || (l.keijo||'').toLowerCase().includes(search));
+        const pages = Math.ceil(filtered.length / pageSize) || 1;
+        if (curPage < pages) {
+            curPage++;
+            renderLotsTable();
+        }
+    }
+
+    // 7. HỆ THỐNG BẢO TRÌ (THU GỌN + GHI CHÚ)
+    function safeGet(obj, path) {
+        return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    }
+
+    // --- CẬP NHẬT: Thay thế localStorage bằng Firebase ---
+    async function changeOvenTemp(ovenName, newTemp) {
+        ovenTemps[ovenName] = newTemp;
+
+        // Cập nhật lên Firebase
+        await db.collection('maintenance').doc('schedules').update({
+            [`ovenTemps.${ovenName}`]: newTemp
+        });
+        // onSnapshot trong initApp sẽ tự động render lại UI cho tất cả máy
+    }
+
+    function renderMaintenanceUI(data) {
+const container = document.getElementById('maintenanceContent');
+const uiLoading = document.getElementById('maintenanceLoading');
+const uiContent = document.getElementById('maintenanceContent');
+
+uiLoading.style.display = 'none';
+uiContent.style.display = 'block';
+
+let html = `<p style="font-style:italic; color:#666; margin-bottom:10px;">Đang xem dữ liệu: <b>Tháng ${viewMonth} / Năm ${viewYear}</b></p>`;
+
+html += `<table class="maintenance-table">
+    <thead>
+        <tr>
+            <th style="width: 100px;">Thiết bị</th>
+            <th style="width: 100px;">Nhiệt độ</th>
+            <th>Vệ sinh (850 1T/LẦN)</th>
+            <th>Đo Profile (3T/LẦN)</th>
+            <th>Ghi chú</th>
+        </tr>
+    </thead>
+    <tbody>`;
+
+// 1. RENDER LÒ (OVEN)
+OVEN_LIST.forEach(id => {
+    const ovenName = `Lò ${id}`;
+    // Lấy nhiệt độ đã đồng bộ
+    const curTemp = ovenTemps[ovenName] || '850';
+
+    // Tạo đường dẫn dữ liệu (Path)
+    let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${viewYear}.${viewMonth}`;
+    let itemVS = safeGet(data, pathVS) || { completed: false, date: null };
+
+    let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${viewYear}.${viewMonth}`;
+    let itemPF = safeGet(data, pathPF) || { completed: false, date: null };
+
+    // Lấy ghi chú
+    let pathNote = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
+    let noteContent = safeGet(data, pathNote) || "";
+
+    html += `<tr>
+        <td style="font-weight:bold; background:#f9f9f9;">${ovenName}</td>
+        <td>
+            <select onchange="changeOvenTemp('${ovenName}', this.value)">
+                <option value="850" ${curTemp=='850'?'selected':''}>850°C</option>
+                <option value="600" ${curTemp=='600'?'selected':''}>600°C</option>
+            </select>
+        </td>
+
+        <td>
+            <div class="task-cell">
+                <input type="checkbox" ${itemVS.completed ? 'checked' : ''}
+                    onchange="toggleMaint('${pathVS}', this.checked)">
+                <input type="date" class="${itemVS.completed ? '' : 'hidden-date'}"
+                    value="${itemVS.date || ''}" onchange="updateMaintDate('${pathVS}', this.value)">
+            </div>
+        </td>
+
+        <td>
+            <div class="task-cell">
+                <input type="checkbox" ${itemPF.completed ? 'checked' : ''}
+                    onchange="toggleMaint('${pathPF}', this.checked)">
+                <input type="date" class="${itemPF.completed ? '' : 'hidden-date'}"
+                    value="${itemPF.date || ''}" onchange="updateMaintDate('${pathPF}', this.value)">
+            </div>
+        </td>
+
+        <td>
+            <input type="text" class="note-input" value="${noteContent}"
+                placeholder="Nhập ghi chú..." onblur="updateOvenNote('${ovenName}', this.value)">
+        </td>
+    </tr>`;
+});
+
+// 2. PHẦN DAKUTO & BĂNG TẢI (Đã chỉnh sửa để khớp với hàm mới)
+let dPath6 = `dakuto.${viewYear}.06`;
+let item6 = safeGet(data, dPath6) || { completed: false, date: null };
+
+let dPath12 = `dakuto.${viewYear}.12`;
+let item12 = safeGet(data, dPath12) || { completed: false, date: null };
+
+// Tính toán ngày đo băng tải
+const targetSaturdays = getTargetSaturdays(parseInt(viewYear), parseInt(viewMonth));
+const saturdayDisplay = targetSaturdays.length > 0 ? targetSaturdays.join(', ') : 'Không có';
+
+// Tính toán thống kê
+const stats = calculateMaintenanceStats(data, viewYear, viewMonth);
+
+html += `<tr style="border-top: 2px solid #ccc; background:#f0f8ff;">
+    <td colspan="2" style="font-weight:bold;">KHÁC</td>
+    <td>
+        <div style="font-weight:bold; margin-bottom:5px;">Vệ sinh Dakuto (T6 & T12)</div>
+
+        <div class="task-cell" style="margin-bottom:5px;">
+            <span>T6:</span>
+            <input type="checkbox" ${item6.completed?'checked':''}
+                onchange="toggleMaint('${dPath6}', this.checked)">
+            <input type="date" class="${item6.completed?'':'hidden-date'}"
+                value="${item6.date||''}" onchange="updateMaintDate('${dPath6}', this.value)">
+        </div>
+
+        <div class="task-cell">
+            <span>T12:</span>
+            <input type="checkbox" ${item12.completed?'checked':''}
+                onchange="toggleMaint('${dPath12}', this.checked)">
+            <input type="date" class="${item12.completed?'':'hidden-date'}"
+                value="${item12.date||''}" onchange="updateMaintDate('${dPath12}', this.value)">
+        </div>
+    </td>
+
+    <td style="background:#fff3cd; border: 1px solid #ffc107;">
+        <div style="font-weight:bold; margin-bottom:5px; color: #856404;">LỊCH ĐO BĂNG TẢI</div>
+        <div>Thứ 7 tuần 1 & 3 của tháng ${viewMonth}:</div>
+        <div style="font-weight:bold; color: var(--primary); font-size: 16px;">${saturdayDisplay}</div>
+    </td>
+
+    <td style="background:#e9f7ef; border: 1px solid #28a745; color: #155724;">
+        <div style="font-weight:bold; margin-bottom:5px;">THỐNG KÊ HOÀN THÀNH</div>
+        <div>Vệ sinh: <b>${stats.vesinhCompleted} / ${stats.totalOvens}</b> Lò</div>
+        <div>Đo Profile: <b>${stats.profileCompleted} / ${stats.totalOvens}</b> Lò</div>
+    </td>
+</tr>`;
+
+html += `</tbody></table>`;
+container.innerHTML = html;
+
+// Xử lý ẩn/hiện input date khi load xong (UI Init)
+document.querySelectorAll('.maintenance-table input[type="checkbox"]').forEach(checkbox => {
+    const dateInput = checkbox.closest('.task-cell').querySelector('input[type="date"]');
+    if (dateInput) {
+        if (checkbox.checked) {
+            dateInput.classList.remove('hidden-date');
+            dateInput.style.width = '110px';
+            dateInput.style.padding = '3px';
+            dateInput.style.border = '1px solid #ddd';
+        } else {
+             dateInput.classList.add('hidden-date');
+        }
+    }
+});
+}
+
+    // HÀM CHUNG: Cập nhật trạng thái check
+  async function toggleMaint(path, isCompleted) {
+// path ví dụ: "ovens.Lò 1.850.Vệ sinh.2025.11" HOẶC "dakuto.2025.06"
+// Chúng ta dùng trực tiếp path này làm Key để update, không cần split/slice gì cả.
+
+const updateData = {};
+updateData[`${path}.completed`] = isCompleted;
+
+// --- Xử lý giao diện ô ngày (Date Input) ---
+// Tìm ô input date nằm cùng dòng với checkbox vừa bấm
+// Lưu ý: event.target là checkbox vừa click
+const checkbox = event.target;
+const taskCell = checkbox.closest('.task-cell');
+const dateInput = taskCell ? taskCell.querySelector('input[type="date"]') : null;
+
+if (dateInput) {
+    if (isCompleted) {
+        // TRƯỜNG HỢP TÍCH CHỌN:
+
+        // 1. Hiện ô input
+        dateInput.classList.remove('hidden-date');
+        dateInput.style.width = '110px';
+        dateInput.style.padding = '3px';
+        dateInput.style.border = '1px solid #ddd';
+
+        // 2. Nếu chưa có ngày, tự điền ngày hôm nay
+        if (!dateInput.value) {
+            // Lấy ngày hiện tại theo giờ địa phương (tránh bị lệch sang hôm trước do múi giờ)
+            const today = new Date();
+            const localISODate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000))
+                                .toISOString().slice(0, 10);
+            dateInput.value = localISODate;
         }
 
-        // --- CẬP NHẬT: Thay thế localStorage bằng Firebase ---
-        async function changeOvenTemp(ovenName, newTemp) {
-            ovenTemps[ovenName] = newTemp;
+        // 3. Lưu ngày vào dữ liệu để update lên Firebase luôn
+        updateData[`${path}.date`] = dateInput.value;
 
-            // Cập nhật lên Firebase
-            await db.collection('maintenance').doc('schedules').update({
-                [`ovenTemps.${ovenName}`]: newTemp
+    } else {
+        // TRƯỜNG HỢP BỎ TÍCH:
+
+        // 1. Ẩn ô input
+        dateInput.classList.add('hidden-date');
+
+        // 2. Set ngày về null trên Firebase
+        updateData[`${path}.date`] = null;
+    }
+}
+
+// --- Gửi lên Firebase ---
+try {
+    // Dùng update để chỉ sửa đúng dòng đó, không ảnh hưởng dữ liệu khác
+    await db.collection('maintenance').doc('schedules').update(updateData);
+    console.log("Đã lưu trạng thái: " + path);
+} catch (e) {
+    // Nếu document chưa tồn tại thì dùng set merge
+    await db.collection('maintenance').doc('schedules').set(updateData, { merge: true });
+}
+}
+
+
+    // HÀM CHUNG: Cập nhật ngày
+   async function updateMaintDate(path, newDate) {
+// path: vẫn là đường dẫn đầy đủ như trên
+const updateData = {};
+updateData[`${path}.date`] = newDate;
+
+try {
+    await db.collection('maintenance').doc('schedules').update(updateData);
+    console.log("Đã cập nhật ngày mới: " + newDate);
+} catch (e) {
+    await db.collection('maintenance').doc('schedules').set(updateData, { merge: true });
+}
+}
+
+    // HÀM CHUNG: Cập nhật ghi chú
+    async function updateMaintNote(path, note) {
+        const update = {};
+        update[path] = note;
+
+        await db.collection('maintenance').doc('schedules').set(update, { merge: true });
+    }
+
+    function hardResetMaintenance() {
+        if(confirm("XÁC NHẬN: Bạn có chắc chắn muốn XÓA TOÀN BỘ dữ liệu bảo trì và khôi phục lại mặc định?")) {
+             db.collection('maintenance').doc('schedules').set({});
+             document.getElementById('maintenanceError').style.display = 'none';
+             alert("Đã khôi phục dữ liệu bảo trì.");
+        }
+    }
+    function updateChecklistItemTime(day, ovenName, itemIndex, newTime) {
+       const monthYear = `${viewMonth}_${viewYear}`;
+       // Tham chiếu đến tài liệu chứa toàn bộ lịch bảo trì
+       const docRef = db.collection('maintenance').doc('schedules');
+
+      // Tạo đường dẫn (path) động đến trường 'time' cụ thể của mục kiểm tra.
+      // Ví dụ: 06_2025.D10.Lò 1.items.2.time
+      const itemPath = `${monthYear}.${day}.${ovenName}.items.${itemIndex}.time`;
+
+       // Sử dụng Firestore update để cập nhật chính xác trường đó
+       docRef.update({
+          [itemPath]: newTime
+       }).then(() => {
+          console.log(`Đã lưu thời gian mới cho ${ovenName} ngày ${day}: ${newTime}`);
+
+          // Cập nhật local cache ngay lập tức để không cần tải lại trang
+          if (maintenanceDataCache[monthYear] && maintenanceDataCache[monthYear][day] && maintenanceDataCache[monthYear][day][ovenName]) {
+              maintenanceDataCache[monthYear][day][ovenName].items[itemIndex].time = newTime;
+          }
+       }).catch(error => {
+           console.error("Lỗi khi cập nhật thời gian mục kiểm tra:", error);
+           alert("Lỗi: Không thể lưu thời gian mới lên server!");
+       });
+   }
+
+
+    // 8. HỆ THỐNG PHÂN TÍCH SẢN LƯỢNG (Excel Reader, Data Processor)
+
+    // Đọc dữ liệu từ file Excel
+    function readExcelFile(file, headerRowIndex) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    // Sử dụng raw: false và cellDates: true để lấy định dạng ngày tháng tốt nhất
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+
+                    // 1. ĐỌC DÒNG TIÊU ĐỀ
+                    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, cellDates: true });
+                    const headerRowData = rawRows[headerRowIndex - 1];
+                    if (!headerRowData || headerRowData.length === 0) {
+                        reject(new Error(`Không tìm thấy dữ liệu ở Dòng Tiêu Đề (${headerRowIndex}) trong file: ${file.name}`));
+                        return;
+                    }
+
+                    // TÁI TẠO MAP KÝ TỰ CỘT -> TÊN HEADER THỰC TẾ
+                    let currentColMap = {};
+                    headerRowData.forEach((headerName, C) => {
+                        if (headerName) {
+                            const colLetter = XLSX.utils.encode_col(C);
+                            // Lưu vào map: { "A": "Lot_ID", "B": "Process" ...}
+                            currentColMap[colLetter.toUpperCase()] = headerName.toString().trim();
+                        }
+                    });
+
+                    // 2. ĐỌC DỮ LIỆU CHÍNH (Bỏ qua các dòng trước dòng header)
+                    const fileData = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIndex - 1, raw: false, cellDates: true });
+
+                    resolve({ fileData, currentColMap });
+
+                } catch (error) {
+                    reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
+                }
+            };
+            reader.onerror = (error) => reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // Hàm xử lý khi chọn file (Đầu VÀO hoặc Đầu RA)
+    async function handleFileSelection(event, type) {
+        document.getElementById('excelError').innerText = '';
+        document.getElementById('productionStatsContainer').style.display = 'none';
+        document.getElementById('exportBtn').style.display = 'none';
+        document.getElementById('captureBtn').style.display = 'none';
+
+        const headerRowIndex = parseInt(document.getElementById('headerRowInput').value) || 1;
+        const files = Array.from(event.target.files);
+        let allData = [];
+        let currentColMap = null;
+        const fileListEl = document.getElementById(`fileList_${type}`);
+
+        fileListEl.innerHTML = files.map(f => `<span>${f.name}</span>`).join(', ');
+        fileListEl.style.color = files.length > 0 ? 'green' : 'red';
+        if (files.length === 0) fileListEl.innerHTML = 'Chưa chọn file.';
+
+        if (type === 'IN') inputFiles = files;
+        else outputFiles = files;
+
+        if (files.length === 0) {
+            if (type === 'IN') allInputData = [];
+            else allOutputData = [];
+            updatePersonSelectBox();
+            return;
+        }
+
+        try {
+            // Đọc file lần lượt
+            const results = await Promise.all(files.map(file => readExcelFile(file, headerRowIndex)));
+
+            results.forEach((res, index) => {
+                allData = allData.concat(res.fileData);
+                // Lấy map cột từ file đầu tiên (giả định các file có cấu trúc giống nhau)
+                if (index === 0) {
+                    currentColMap = res.currentColMap;
+                }
             });
-            // onSnapshot trong initApp sẽ tự động render lại UI cho tất cả máy
+
+        } catch (error) {
+            document.getElementById('excelError').innerText = error.message;
+            // Nếu lỗi, xóa hết dữ liệu đã đọc
+            if (type === 'IN') { allInputData = []; inputFiles = []; }
+            else { allOutputData = []; outputFiles = []; }
+            fileListEl.innerHTML = '<span style="color:red;">Lỗi tải file.</span>';
+            updatePersonSelectBox();
+            return;
         }
 
-        function renderMaintenanceUI(data) {
-            const container = document.getElementById('maintenanceContent');
-            const uiLoading = document.getElementById('maintenanceLoading');
-            const uiContent = document.getElementById('maintenanceContent');
+        if (files.length > 0) {
+            document.getElementById('excelError').innerText = `✅ Đã tải thành công ${files.length} file cho Đầu ${type==='IN'?'VÀO':'RA'}. Tổng ${allData.length} dòng dữ liệu.`;
+        }
 
-            uiLoading.style.display = 'none';
-            uiContent.style.display = 'block';
+        // Lưu trữ dữ liệu và map tương ứng
+        if (type === 'IN') {
+            allInputData = allData;
+            if (currentColMap) inputColMap = currentColMap; // LƯU MAP CHO ĐẦU VÀO
+        } else {
+            allOutputData = allData;
+            if (currentColMap) outputColMap = currentColMap; // LƯU MAP CHO ĐẦU RA
+        }
 
-            let html = `<p style="font-style:italic; color:#666; margin-bottom:10px;">Đang xem dữ liệu: <b>Tháng ${viewMonth} / Năm ${viewYear}</b></p>`;
+        // Cập nhật thông báo cấu hình cột
+        if (files.length > 0 && currentColMap) {
+            document.getElementById('excelError').innerText += `\n\n💡 **Tên cột chuẩn cho Đầu ${type==='IN'?'VÀO':'RA'} đã được thiết lập.**`;
+        }
 
-            html += `<table class="maintenance-table">
-                <thead>
-                    <tr>
-                        <th style="width: 100px;">Thiết bị</th>
-                        <th style="width: 100px;">Nhiệt độ</th>
-                        <th>Vệ sinh (850 1T/LẦN)</th>
-                        <th>Đo Profile (3T/LẦN)</th>
-                        <th>Ghi chú</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+        // Cập nhật danh sách Người TH
+        updatePersonSelectBox();
+    }
 
-            // 1. RENDER LÒ - LOGIC THU GỌN
-            OVEN_LIST.forEach(id => {
-                const ovenName = `Lò ${id}`;
-                // Lấy nhiệt độ đã đồng bộ
-                const curTemp = ovenTemps[ovenName] || '850';
+    // Cập nhật danh sách người làm việc từ dữ liệu đã tải
+    function updatePersonSelectBox() {
+        const personSet = new Set();
+        const personColLetter = document.getElementById('colPersonInput').value.trim().toUpperCase();
 
-                // Lấy dữ liệu
-                let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${viewYear}.${viewMonth}`;
-                let itemVS = safeGet(data, pathVS) || { completed: false, date: null };
+        const getPersonName = (data, map) => {
+            if (!map || Object.keys(map).length === 0) return null;
+            const personColName = map[personColLetter];
+            if (!personColName) return null;
 
-                let pathPF = `ovens.${ovenName}.${curTemp}.Đo Profile.${viewYear}.${viewMonth}`;
-                let itemPF = safeGet(data, pathPF) || { completed: false, date: null };
+            data.forEach(row => {
+                const name = row[personColName];
+                if (name && typeof name === 'string' && name.trim()) {
+                    personSet.add(name.trim());
+                }
+            });
+        };
 
-                // Lấy ghi chú
-                let pathNote = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
-                let noteContent = safeGet(data, pathNote) || "";
+        getPersonName(allInputData, inputColMap);
+        getPersonName(allOutputData, outputColMap);
 
-                html += `<tr>
-                    <td style="font-weight:bold; background:#f9f9f9;">${ovenName}</td>
-                    <td>
-                        <select onchange="changeOvenTemp('${ovenName}', this.value)">
-                            <option value="850" ${curTemp=='850'?'selected':''}>850°C</option>
-                            <option value="600" ${curTemp=='600'?'selected':''}>600°C</option>
-                        </select>
-                    </td>
+        const personSelect = document.getElementById('personSelect');
+        const currentSelected = personSelect.value;
+        personSelect.innerHTML = '<option value="all">-- Tất Cả Mọi Người --</option>';
 
-                    <td>
-                        <div class="task-cell">
-                            <input type="checkbox" ${itemVS.completed ? 'checked' : ''}
-                                onchange="toggleMaint('${pathVS}', this.checked)">
-                            <input type="date" class="${itemVS.completed ? '' : 'hidden-date'}"
-                                value="${itemVS.date || ''}" onchange="updateMaintDate('${pathVS}', this.value)">
-                        </div>
-                    </td>
+        const sortedPeople = Array.from(personSet).sort();
 
-                    <td>
-                        <div class="task-cell">
-                            <input type="checkbox" ${itemPF.completed ? 'checked' : ''}
-                                onchange="toggleMaint('${pathPF}', this.checked)">
-                            <input type="date" class="${itemPF.completed ? '' : 'hidden-date'}"
-                                value="${itemPF.date || ''}" onchange="updateMaintDate('${pathPF}', this.value)">
-                        </div>
-                    </td>
+        sortedPeople.forEach(person => {
+            const option = document.createElement('option');
+            option.value = person;
+            option.textContent = person;
+            personSelect.appendChild(option);
+        });
 
-                    <td>
-                        <input type="text" class="note-input" value="${noteContent}"
-                            placeholder="Nhập ghi chú..." onblur="updateOvenNote('${ovenName}', this.value)">
-                    </td>
-                </tr>`;
+        // Giữ lại lựa chọn hiện tại nếu còn trong danh sách
+        if (personSet.has(currentSelected)) {
+            personSelect.value = currentSelected;
+        }
+    }
+
+    // Xử lý dữ liệu thô (Raw Data) để tạo thống kê (Stats)
+    function processData(data, colNames, selectedPerson, selectedMonth, selectedYear) {
+        let stats = {};
+        let grandTotal = 0;
+
+        if (!colNames.prodColName || !colNames.personColName || !colNames.processColName || !colNames.dateColName) {
+            console.error("Thiếu tên cột!");
+            return { stats: {}, grandTotal: 0 };
+        }
+
+        data.forEach(row => {
+            // Lấy giá trị
+            const person = row[colNames.personColName]?.toString().trim();
+            const process = row[colNames.processColName]?.toString().trim();
+            const dateRaw = row[colNames.dateColName];
+            const panels = parseFloat(row[colNames.prodColName]);
+
+            // Xử lý ngày tháng
+            let rowDate = null;
+            if (dateRaw) {
+                // Excel dates are sometimes stored as numbers if not formatted correctly
+                if (typeof dateRaw === 'number') {
+                    // Excel Epoch is 1899-12-30
+                    rowDate = new Date(Date.UTC(0, 0, dateRaw - 1));
+                } else if (dateRaw instanceof Date && !isNaN(dateRaw)) {
+                    rowDate = dateRaw;
+                } else if (typeof dateRaw === 'string') {
+                     rowDate = new Date(dateRaw);
+                }
+            }
+
+            // Kiểm tra điều kiện lọc
+            const isValid = person && process && !isNaN(panels) && panels > 0 && rowDate && !isNaN(rowDate.getTime());
+            if (!isValid) return;
+
+            const rowMonth = String(rowDate.getMonth() + 1).padStart(2, '0');
+            const rowYear = rowDate.getFullYear().toString();
+
+            const monthMatch = rowMonth === selectedMonth;
+            const yearMatch = rowYear === selectedYear;
+            const personMatch = selectedPerson === 'all' || person === selectedPerson;
+
+            if (monthMatch && yearMatch && personMatch) {
+                // Thêm vào danh sách công đoạn chung
+                processList.add(process);
+
+                // Cập nhật thống kê
+                if (!stats[person]) {
+                    stats[person] = { grandTotal: 0 };
+                }
+
+                stats[person][process] = (stats[person][process] || 0) + panels;
+                stats[person].grandTotal += panels;
+                grandTotal += panels;
+            }
+        });
+
+        return { stats, grandTotal };
+    }
+
+    // Kết hợp thống kê từ file IN và OUT
+    function combineStats(statsIn, statsOut) {
+        let combinedStats = {};
+        let grandTotal = 0;
+        const allPeople = new Set([...Object.keys(statsIn), ...Object.keys(statsOut)]);
+
+        allPeople.forEach(personName => {
+            let pStats = { grandTotal: 0 };
+            const dataIn = statsIn[personName] || {};
+            const dataOut = statsOut[personName] || {};
+
+            // Duyệt qua tất cả các công đoạn đã tìm thấy
+            processList.forEach(proc => {
+                const valIn = dataIn[proc] || 0;
+                const valOut = dataOut[proc] || 0;
+                const total = valIn + valOut;
+
+                pStats[proc] = total;
+                pStats.grandTotal += total;
             });
 
-            // 2. Dakuto & Băng tải
-            let dPath6 = `dakuto.${viewYear}.06`;
-            let item6 = safeGet(data, dPath6) || { completed: false, date: null };
-            let dPath12 = `dakuto.${viewYear}.12`;
-            let item12 = safeGet(data, dPath12) || { completed: false, date: null };
+            combinedStats[personName] = pStats;
+            grandTotal += pStats.grandTotal;
+        });
 
-            // Tính toán ngày đo băng tải
-            const targetSaturdays = getTargetSaturdays(parseInt(viewYear), parseInt(viewMonth));
-            const saturdayDisplay = targetSaturdays.length > 0 ? targetSaturdays.join(', ') : 'Không có';
+        return { stats: combinedStats, grandTotal };
+    }
 
-            // Tính toán thống kê
-            const stats = calculateMaintenanceStats(data, viewYear, viewMonth);
+    // Hàm lấy class màu cho ô công đoạn
+    function getColorClass(processName) {
+        if (!processName) return 'color-default'; // NẾU RỖNG THÌ DÙNG MẶC ĐỊNH
+        const key = processName.toUpperCase().replace(/[^A-Z0-9]/g, ''); // Xóa ký tự đặc biệt
+        // Trả về màu định sẵn hoặc màu mặc định nếu không khớp
+        return PROCESS_COLORS[key] || 'color-default';
+    }
 
-            html += `<tr style="border-top: 2px solid #ccc; background:#f0f8ff;">
-                <td colspan="2" style="font-weight:bold;">KHÁC</td>
-                <td>
-                    <div style="font-weight:bold; margin-bottom:5px;">Vệ sinh Dakuto (T6 & T12)</div>
-                    <div class="task-cell" style="margin-bottom:5px;">
-                        <span>T6:</span>
-                        <input type="checkbox" ${item6.completed?'checked':''} onchange="toggleMaint('${dPath6}', this.checked)">
-                        <input type="date" class="${item6.completed?'':'hidden-date'}" value="${item6.date||''}" onchange="updateMaintDate('${dPath6}', this.value)">
-                    </div>
-                    <div class="task-cell">
-                        <span>T12:</span>
-                        <input type="checkbox" ${item12.completed?'checked':''} onchange="toggleMaint('${dPath12}', this.checked)">
-                        <input type="date" class="${item12.completed?'':'hidden-date'}" value="${item12.date||''}" onchange="updateMaintDate('${dPath12}', this.value)">
-                    </div>
-                </td>
-                <td style="background:#fff3cd; border: 1px solid #ffc107;">
-                    <div style="font-weight:bold; margin-bottom:5px; color: #856404;">LỊCH ĐO BĂNG TẢI</div>
-                    <div>Thứ 7 tuần 1 & 3 của tháng ${viewMonth}:</div>
-                    <div style="font-weight:bold; color: var(--primary); font-size: 16px;">${saturdayDisplay}</div>
-                </td>
+    // HÀM MỚI: TÍNH TẤM/GIỜ VÀ CẬP NHẬT GIAO DIỆN
+    function calculatePanelsPerHour(personId, totalPanels) {
+        // Sử dụng ID của người để lấy giá trị nhập liệu
+        const workingDays = parseFloat(document.getElementById(`days_${personId}`).value) || 0;
+        const otHours = parseFloat(document.getElementById(`ot_${personId}`).value) || 0;
+        const resultEl = document.getElementById(`pph_${personId}`);
 
-                <td style="background:#e9f7ef; border: 1px solid #28a745; color: #155724;">
-                    <div style="font-weight:bold; margin-bottom:5px;">THỐNG KÊ HOÀN THÀNH</div>
-                    <div>Vệ sinh: <b>${stats.vesinhCompleted} / ${stats.totalOvens}</b> Lò</div>
-                    <div>Đo Profile: <b>${stats.profileCompleted} / ${stats.totalOvens}</b> Lò</div>
-                </td>
-            </tr>`;
-
-            html += `</tbody></table>`;
-            container.innerHTML = html;
+        // 1 ngày làm việc là 8 giờ
+        const totalHours = (workingDays * 8) + otHours;
+        let panelsPerHour = 0;
+        if (totalHours > 0) {
+            panelsPerHour = totalPanels / totalHours;
         }
 
-        async function toggleMaint(path, checked) {
-            const today = new Date().toISOString().slice(0,10);
+        // Cập nhật kết quả trên giao diện
+        resultEl.textContent = panelsPerHour.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+    }
 
-            // Xây dựng object update cho Firebase (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11)
-            const parts = path.split('.');
-            let updateObject = {};
-            // Lấy 4 phần đầu tiên (ví dụ: ovens.Lò 1.850.Vệ sinh)
-            let basePath = parts.slice(0, 4).join('.');
-            // Thêm phần năm và tháng để tạo path cuối cùng (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11)
-            let fullPath = `${basePath}.${viewYear}.${viewMonth}`;
+    // Hàm render các bảng thống kê (ĐÃ CẬP NHẬT ĐỂ HIỂN THỊ TẤM/GIỜ THEO NGƯỜI VÀ ẨN CỘT TÍNH TOÁN)
+function renderStatsTables(statsData, month, year) {
+const container = document.getElementById('productionStatsContainer');
+container.style.display = 'flex';
+container.innerHTML = '';
 
-            updateObject[fullPath] = { completed: checked, date: checked ? today : null };
+// Lấy danh sách công đoạn chung từ cả IN và OUT
+// Lưu ý: processList là biến toàn cục được cập nhật trong calculateProduction
+const allProcesses = Array.from(processList).sort();
+const peopleForInitialCalc = []; // Danh sách người để tính Tấm/giờ ban đầu
 
-            await db.collection('maintenance').doc('schedules').update(updateObject);
-            // onSnapshot sẽ tự động kích hoạt renderMaintenanceUI
+// Duyệt qua 3 loại báo cáo ['input', 'output', 'total'].
+['input', 'output', 'total'].forEach(key => {
+    const { title, data, total, files } = statsData[key];
+    const sortedPeople = Object.keys(data).map(name => ({ name: name, data: data[name], total: data[name].grandTotal })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
+
+    // Nếu không có dữ liệu để hiển thị, bỏ qua bảng này
+    if (sortedPeople.length === 0) return;
+
+    // Tạo khung chứa bảng
+    let section = `<div id="statsBox_${key}" style="border: 1px solid #ddd; padding: 15px; border-radius: 8px;">
+        <h3>${title} <span style="font-size: 14px; font-weight: normal; color: #666;">(${files})</span></h3>
+        <table class="stats-table" id="table_${key}">
+            <thead>
+                <tr>
+                    <th class="person-col" rowspan="2">Người TH</th>
+                    <th colspan="${allProcesses.length}">CÔNG ĐOẠN (Tấm)</th>
+                    <th rowspan="2">TỔNG</th>
+
+                    ${key === 'total' ? `
+                        <th colspan="2" style="background: #f0f8ff; color: #007bff;">ĐẦU VÀO TÍNH TOÁN</th>
+                        <th rowspan="2" style="background: var(--success); color: white;">TẤM/GIỜ</th>
+                    ` : ''}
+                </tr>
+                <tr>
+                    ${allProcesses.map(p => `<th>${p}</th>`).join('')}
+
+                    ${key === 'total' ? `
+                        <th style="background: #f0f8ff; color: #007bff;">Số ngày làm</th>
+                        <th style="background: #f0f8ff; color: #007bff;">Giờ TC</th>
+                    ` : ''}
+                </tr>
+            </thead>
+            <tbody>`;
+
+    // Thêm dữ liệu cho từng người
+    sortedPeople.forEach(person => {
+        const personId = person.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, ''); // Tạo ID an toàn
+        const totalPanels = person.total;
+
+        // Chỉ thêm vào danh sách cần tính Tấm/giờ nếu là bảng TỔNG HỢP
+        if (key === 'total') {
+            peopleForInitialCalc.push({ id: personId, total: totalPanels });
         }
 
-        async function updateMaintDate(path, newDate) {
-            // Xây dựng path đầy đủ bao gồm năm và tháng (ví dụ: ovens.Lò 1.850.Vệ sinh.2025.11.date)
-            let fullPath = `${path}.${viewYear}.${viewMonth}.date`;
-            await db.collection('maintenance').doc('schedules').update({ [fullPath]: newDate });
+        section += `<tr id="person_${personId}">
+            <td class="person-col">${person.name}</td>`;
+
+        // Cột Công Đoạn (Tô màu được áp dụng ở đây)
+        allProcesses.forEach(proc => {
+            const value = person.data[proc] || 0;
+            const colorClass = getColorClass(proc); // Thêm màu nền cho ô dữ liệu công đoạn
+            section += `<td class="process-cell ${colorClass}">${value > 0 ? value.toLocaleString('vi-VN') : '-'}</td>`;
+        });
+
+        // Cột TỔNG
+        section += `<td class="total-col">${totalPanels.toLocaleString('vi-VN')}</td>`;
+
+        // Cột Ngày làm việc, Giờ OT, Tấm/giờ (Chỉ hiển thị cho bảng TỔNG HỢP)
+        if (key === 'total') {
+            section += `
+                <td><input type="number" id="days_${personId}" value="20" min="0" oninput="calculatePanelsPerHour('${personId}', ${totalPanels})" style="width: 90%; text-align: right; padding: 4px;"></td>
+                <td><input type="number" id="ot_${personId}" value="0" min="0" oninput="calculatePanelsPerHour('${personId}', ${totalPanels})" style="width: 90%; text-align: right; padding: 4px;"></td>
+                <td id="pph_${personId}" class="total-col" style="background: #e9f7ef; color: #155724;"> 0.00 </td>`;
+        }
+        // KHÔNG CẦN ELSE NỮA VÌ CÁC CỘT ĐÓ ĐÃ KHÔNG ĐƯỢC RENDER TRONG HEADER
+
+        section += `</tr>`;
+    });
+
+    // Hàng Tổng Cộng (Grand Total)
+    // Colspan được điều chỉnh tùy theo key (4 cột ẩn/hiện)
+    const totalColspan = key === 'total' ? allProcesses.length + 1 : allProcesses.length;
+
+    section += `<tr class="grand-total-row">
+        <th colspan="${totalColspan}">TỔNG CỘNG</th>
+        <td colspan="1">${total.toLocaleString('vi-VN')}</td>
+        ${key === 'total' ? `<td colspan="3" style="text-align: center; background: #f0f0f0;">(Tính theo người)</td>` : ''}
+        </tr>`;
+
+    section += `</tbody></table></div>`;
+    container.insertAdjacentHTML('beforeend', section);
+});
+
+// Sau khi render xong, tính toán Tấm/giờ ban đầu
+if (peopleForInitialCalc.length > 0) {
+    // Dùng setTimeout để đảm bảo DOM đã render xong input
+    setTimeout(() => {
+        peopleForInitialCalc.forEach(person => {
+            // Kiểm tra lại để đảm bảo element days_personId đã có
+            if(document.getElementById(`days_${person.id}`)) {
+                calculatePanelsPerHour(person.id, person.total);
+            }
+        });
+    }, 100);
+}
+
+document.getElementById('exportBtn').style.display = 'inline-block';
+document.getElementById('captureBtn').style.display = 'inline-block';
+}
+
+    // Hàm chính tính toán sản lượng
+    function calculateProduction() {
+        document.getElementById('productionStatsContainer').style.display = 'none';
+        document.getElementById('productionStatsContainer').innerHTML = '';
+        document.getElementById('exportBtn').style.display = 'none';
+        document.getElementById('captureBtn').style.display = 'none';
+        document.getElementById('excelError').innerText = '';
+
+        if (allInputData.length === 0 && allOutputData.length === 0) {
+            document.getElementById('excelError').innerText = 'Vui lòng tải ít nhất một file (Đầu VÀO hoặc Đầu RA).';
+            return;
         }
 
-        async function updateOvenNote(ovenName, content) {
-            const path = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
-            await db.collection('maintenance').doc('schedules').update({ [path]: content });
+        // **KIỂM TRA MAP**: Chỉ cần map tồn tại nếu có dữ liệu cho loại đó
+        if (allInputData.length > 0 && Object.keys(inputColMap).length === 0) {
+            document.getElementById('excelError').innerText = 'Lỗi: Vui lòng tải lại file ĐẦU VÀO đầu tiên để xác định Tên Header.';
+            return;
+        }
+        if (allOutputData.length > 0 && Object.keys(outputColMap).length === 0) {
+            document.getElementById('excelError').innerText = 'Lỗi: Vui lòng tải lại file ĐẦU RA đầu tiên để xác định Tên Header.';
+            return;
         }
 
-        async function hardResetMaintenance() {
-            if(!confirm("CẢNH BÁO: Dữ liệu cũ sẽ bị mất. Bạn có chắc không?")) return;
-            await db.collection('maintenance').doc('schedules').delete();
-            // Khởi tạo lại dữ liệu mặc định
-            await db.collection('maintenance').doc('schedules').set({ ovenTemps: ovenTemps });
-            // Sau khi xóa và set lại, onSnapshot sẽ tự động kích hoạt render lại UI
+        const prodColLetter = document.getElementById('colProdInput').value.trim().toUpperCase();
+        const personColLetter = document.getElementById('colPersonInput').value.trim().toUpperCase();
+        const processColLetter = document.getElementById('colProcessInput').value.trim().toUpperCase();
+        const dateColLetter = document.getElementById('colDateInput').value.trim().toUpperCase();
+
+        // *** TẠO HAI BỘ TÊN CỘT RIÊNG BIỆT ***
+        const getColNames = (map) => {
+            // Chỉ trả về tên cột nếu có dữ liệu và map có giá trị
+            if (Object.keys(map).length === 0) return {};
+            return {
+                prodColName: map[prodColLetter],
+                personColName: map[personColLetter],
+                processColName: map[processColLetter],
+                dateColName: map[dateColLetter],
+            };
+        };
+
+        const inputColNames = getColNames(inputColMap);
+        const outputColNames = getColNames(outputColMap);
+
+        // Kiểm tra xem tất cả các cột cần thiết có được map thành công không
+        const checkMissingCols = (colNames) => {
+            const missing = [];
+            if (!colNames.prodColName) missing.push(`Cột Sản Lượng (${prodColLetter})`);
+            if (!colNames.personColName) missing.push(`Cột Người TH (${personColLetter})`);
+            if (!colNames.processColName) missing.push(`Cột Công Đoạn (${processColLetter})`);
+            if (!colNames.dateColName) missing.push(`Cột Ngày Tháng (${dateColLetter})`);
+            return missing;
+        };
+
+        const missingIn = allInputData.length > 0 ? checkMissingCols(inputColNames) : [];
+        const missingOut = allOutputData.length > 0 ? checkMissingCols(outputColNames) : [];
+
+        if (missingIn.length > 0 || missingOut.length > 0) {
+            let errorMsg = '⚠️ Lỗi cấu hình cột! Không tìm thấy tiêu đề cột tương ứng. Vui lòng kiểm tra lại Ký Tự Cột và Dòng Tiêu Đề đã nhập.\n';
+            if (missingIn.length > 0) errorMsg += ` - **File Đầu VÀO**: ${missingIn.join(', ')}\n`;
+            if (missingOut.length > 0) errorMsg += ` - **File Đầu RA**: ${missingOut.join(', ')}\n`;
+            document.getElementById('excelError').innerHTML = errorMsg.replace(/\n/g, '<br>');
+            return;
         }
 
-    </script>
+        // Reset global process list
+        processList = new Set();
+        const selectedPerson = document.getElementById('personSelect').value;
+        const selectedMonth = document.getElementById('prodMonth').value;
+        const selectedYear = document.getElementById('prodYear').value;
+
+        // 1. TÍNH TOÁN ĐẦU VÀO (Dùng inputColNames)
+        const inputResults = allInputData.length > 0 ? processData(allInputData, inputColNames, selectedPerson, selectedMonth, selectedYear) : { stats: {}, grandTotal: 0 };
+
+        // 2. TÍNH TOÁN ĐẦU RA (Dùng outputColNames)
+        const outputResults = allOutputData.length > 0 ? processData(allOutputData, outputColNames, selectedPerson, selectedMonth, selectedYear) : { stats: {}, grandTotal: 0 };
+
+        // 3. TÍNH TOÁN TỔNG (IN + OUT)
+        const combinedResults = combineStats(inputResults.stats, outputResults.stats);
+        const grandTotalPanels = combinedResults.grandTotal;
+
+        // 4. KIỂM TRA LỖI CUỐI CÙNG
+        if (combinedResults.grandTotal === 0) {
+            // Cập nhật thông báo lỗi để phản ánh logic mới
+            const sampleColName = inputColNames.prodColName || outputColNames.prodColName || 'Chưa rõ';
+            const sampleDateName = inputColNames.dateColName || outputColNames.dateColName || 'Chưa rõ';
+
+            let errorMsg = `⚠️ Không tìm thấy dữ liệu hợp lệ nào cho điều kiện đã chọn (Tháng ${selectedMonth}/${selectedYear}`;
+            if (selectedPerson !== 'all') errorMsg += ` và Người TH: ${selectedPerson}`;
+            errorMsg += `).\n\nVui lòng kiểm tra:\n`;
+            errorMsg += `- **Ngày tháng** trong file có khớp với định dạng '${sampleDateName}' và khoảng thời gian T${selectedMonth}/${selectedYear} không.\n`;
+            errorMsg += `- **Cột Sản Lượng** ('${sampleColName}') có chứa giá trị số (Tấm) > 0 không.`;
+
+            document.getElementById('excelError').innerHTML = errorMsg.replace(/\n/g, '<br>');
+            return;
+        }
+
+        // 5. CHUẨN BỊ DỮ LIỆU ĐỂ RENDER
+        const statsData = {
+            input: {
+                title: 'BÁO CÁO SẢN LƯỢNG ĐẦU VÀO',
+                data: inputResults.stats,
+                total: inputResults.grandTotal,
+                files: inputFiles.map(f => f.name).join(', ') || 'Không có file',
+            },
+            output: {
+                title: 'BÁO CÁO SẢN LƯỢNG ĐẦU RA',
+                data: outputResults.stats,
+                total: outputResults.grandTotal,
+                files: outputFiles.map(f => f.name).join(', ') || 'Không có file',
+            },
+            total: {
+                title: `BÁO CÁO TỔNG HỢP SẢN LƯỢNG T${selectedMonth}/${selectedYear}`,
+                data: combinedResults.stats,
+                total: combinedResults.grandTotal,
+                files: 'Tổng hợp từ File IN và OUT',
+            }
+        };
+
+        // 6. RENDER
+        renderStatsTables(statsData, selectedMonth, selectedYear);
+    }
+
+    /**
+* Xuất dữ liệu sản lượng từ các bảng DAU_VAO, DAU_RA và TONG_HOP ra file Excel.
+* Hàm này bao gồm logic xử lý các trường <input> trong bảng TỔNG HỢP để lấy giá trị hiện tại thay vì thẻ input.
+*/
+function exportToExcel() {
+const month = document.getElementById('prodMonth').value;
+const year = document.getElementById('prodYear').value;
+const filename = `BAO_CAO_SAN_LUONG_${month}_${year}_${new Date().getTime()}.xlsx`;
+const wb = XLSX.utils.book_new();
+
+// Lấy danh sách công đoạn chung (Giả sử processList là biến toàn cục đã được khai báo)
+const allProcesses = Array.from(processList).sort();
+
+// Hàm trích xuất dữ liệu từ bảng HTML
+function getTableData(tableId, sheetName) {
+    const table = document.getElementById(tableId);
+    if (!table) return null;
+
+    // Tiêu đề
+    const titleText = document.querySelector(`#statsBox_${tableId.split('_')[1]} h3`).textContent;
+    const title = [[titleText]];
+    const ws_title = XLSX.utils.aoa_to_sheet(title);
+
+    // Lấy HTML của bảng gốc
+    const tableHtml = table.outerHTML;
+    let tempTableHtml = tableHtml;
+
+    // Xử lý chuyển đổi input thành giá trị cho bảng TỔNG HỢP
+    if (sheetName === 'TONG_HOP') {
+        // Dùng DOMParser để xử lý HTML mà không cần render ra giao diện
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(tableHtml, 'text/html');
+        const tempTable = doc.querySelector(`#${tableId}`);
+
+        if(tempTable) {
+            tempTable.querySelectorAll('tbody tr').forEach(row => {
+                // Bỏ qua dòng Grand Total
+                if (row.classList.contains('grand-total-row')) return;
+
+                const personId = row.id.replace('person_', '');
+
+                // Lấy giá trị của input (từ DOM thật đang hiển thị)
+                const daysInput = document.getElementById(`days_${personId}`);
+                const otInput = document.getElementById(`ot_${personId}`);
+                const pphCell = document.getElementById(`pph_${personId}`);
+
+                // Thay thế input/cell trong HTML tạm thời bằng giá trị của nó
+                const tempRow = tempTable.querySelector(`#${row.id}`);
+
+                // Cột Ngày làm việc
+                if (daysInput && tempRow.children[allProcesses.length + 2]) {
+                    tempRow.children[allProcesses.length + 2].innerHTML = daysInput.value;
+                }
+                // Cột Giờ tăng ca
+                if (otInput && tempRow.children[allProcesses.length + 3]) {
+                    tempRow.children[allProcesses.length + 3].innerHTML = otInput.value;
+                }
+                // Cột Tấm/Giờ
+                 if (pphCell && tempRow.children[allProcesses.length + 4]) {
+                    tempRow.children[allProcesses.length + 4].innerHTML = pphCell.textContent.trim();
+                }
+            });
+            tempTableHtml = tempTable.outerHTML;
+        }
+    }
+
+    // === KHẮC PHỤC LỖI TẠI ĐÂY ===
+    // 1. Tạo phần tử DIV tạm thời
+    const tempDiv = document.createElement('div');
+    // 2. Gán chuỗi HTML đã chuẩn bị vào innerHTML
+    tempDiv.innerHTML = tempTableHtml;
+    // 3. Truyền phần tử DOM (tempDiv) vào hàm table_to_sheet
+    const ws_table = XLSX.utils.table_to_sheet(tempDiv);
+    // =============================
+
+    const range = XLSX.utils.decode_range(ws_table['!ref']);
+
+    // Di chuyển dữ liệu bảng xuống 1 dòng để chừa chỗ cho tiêu đề
+    for (let R = range.e.r; R >= range.s.r; R--) {
+        for (let C = range.e.c; C >= range.s.c; C--) {
+            const cellref = XLSX.utils.encode_cell({ r: R, c: C });
+            const targetref = XLSX.utils.encode_cell({ r: R + 1, c: C });
+            ws_title[targetref] = ws_table[cellref];
+        }
+    }
+
+    // Cập nhật lại dải ô của sheet mới
+    if (ws_table['!ref']) {
+        const newRange = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: range.e.r + 1, c: range.e.c } });
+        ws_title['!ref'] = newRange;
+    }
+
+    // Định dạng cột
+    const wscols = [];
+    wscols.push({ wch: 20 }); // Cột Tên người
+    for(let i=0; i < allProcesses.length; i++) {
+        wscols.push({ wch: 15 }); // Cột công đoạn
+    }
+    wscols.push({ wch: 15 }); // Cột Tổng
+
+    if (sheetName === 'TONG_HOP') {
+        wscols.push({ wch: 15 }); // Cột Ngày làm việc
+        wscols.push({ wch: 15 }); // Cột Giờ tăng ca
+        wscols.push({ wch: 15 }); // Cột Tấm/Giờ
+    }
+
+    ws_title['!cols'] = wscols;
+
+    return ws_title;
+}
+
+// Thêm từng bảng vào workbook
+const sheetNames = [
+    { id: 'table_input', name: 'DAU_VAO_IN' },
+    { id: 'table_output', name: 'DAU_RA_OUT' },
+    { id: 'table_total', name: 'TONG_HOP' }
+];
+
+sheetNames.forEach(sheet => {
+    const ws = getTableData(sheet.id, sheet.name);
+    if (ws) {
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+    }
+});
+
+// Ghi file
+XLSX.writeFile(wb, filename);
+// Giả sử hàm sendDiscordNotification tồn tại và hoạt động
+sendDiscordNotification(`📊 **Đã xuất file báo cáo Sản Lượng T${month}/${year}**.`);
+}
+
+    // 10. CHỨC NĂNG CHỤP ẢNH BẢNG THỐNG KÊ (Đã chỉnh sửa để ẩn input khi chụp)
+    function captureAndDownloadStats() {
+        const container = document.getElementById('productionStatsContainer');
+        if (!container || container.style.display === 'none') {
+            alert("Vui lòng Tính Tổng Sản Lượng trước khi chụp ảnh.");
+            return;
+        }
+
+        const month = document.getElementById('prodMonth').value;
+        const year = document.getElementById('prodYear').value;
+        const title = `BAO CAO SAN LUONG THANG ${month}/${year}`;
+
+        // Tạm thời ẩn các input để chụp ảnh đẹp hơn
+        const inputs = container.querySelectorAll('input[type="number"]');
+        inputs.forEach(input => {
+            input.style.display = 'none';
+            // Thêm giá trị text bên cạnh
+            input.parentNode.insertAdjacentText('beforeend', input.value);
+        });
+
+        html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(canvas => {
+            const imageURL = canvas.toDataURL("image/png");
+            const link = document.createElement('a');
+            link.href = imageURL;
+            link.download = `${title.replace(/ /g, '_')}_${new Date().getTime()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Khôi phục lại input
+            inputs.forEach(input => {
+                input.style.display = 'inline-block';
+                // Xóa node text vừa thêm vào (nodeValue === input.value)
+                if (input.nextSibling && input.nextSibling.nodeType === 3 && input.nextSibling.nodeValue === input.value) {
+                     input.parentNode.removeChild(input.nextSibling);
+                }
+            });
+
+            alert("Đã chụp ảnh và lưu vào máy!");
+        }).catch(err => {
+            console.error("Lỗi chụp ảnh:", err);
+            alert("Lỗi: Không thể chụp ảnh thống kê.");
+            // Đảm bảo khôi phục input nếu có lỗi
+            inputs.forEach(input => {
+                input.style.display = 'inline-block';
+                if (input.nextSibling && input.nextSibling.nodeType === 3 && input.nextSibling.nodeValue === input.value) {
+                     input.parentNode.removeChild(input.nextSibling);
+                }
+            });
+        });
+    }
+
+    // 11. KHẮC PHỤC LỖI REFERENCE ERROR: GẮN EVENT LISTENER SAU KHI TẢI XONG
+    document.addEventListener('DOMContentLoaded', () => {
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        if (loginBtn) {
+            // Đính kèm hàm handleLogin vào sự kiện click
+            loginBtn.addEventListener('click', handleLogin);
+        }
+        if (logoutBtn) {
+             // Đính kèm hàm handleLogout vào sự kiện click
+             logoutBtn.addEventListener('click', handleLogout);
+        }
+    });
+
+
+</script>
 </body>
 </html>
