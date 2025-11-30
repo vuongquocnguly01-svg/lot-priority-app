@@ -224,6 +224,24 @@
         </div>
     </div>
 
+    <div style="margin-bottom: 10px;">
+        <button id="add-furnace-btn" ...>➕ Thêm Lò Nung</button>
+        <button id="delete-furnace-btn" ...>🗑️ Xóa Lò Nung</button>
+
+        <div id="add-furnace-dialog" style="display:none; margin-top: 10px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 5px;">
+            <input type="text" id="new-furnace-name" ...>
+            <button id="save-new-furnace-btn" ...>Lưu</button>
+            <button id="cancel-add-furnace-btn" ...>Hủy</button>
+        </div>
+
+        <div id="delete-furnace-dialog" style="display:none; margin-top: 10px; padding: 10px; border: 1px solid #ccc; background: #fff3cd; border-radius: 5px;">
+            <select id="furnace-select-to-delete" ...></select>
+            <input type="password" id="delete-password-input" ...>
+            <button id="confirm-delete-btn" ...>Xác nhận Xóa</button>
+            <button id="cancel-delete-btn" ...>Hủy</button>
+        </div>
+    </div>
+
     <div class="production-section">
         <h2>📈 PHÂN TÍCH SẢN LƯỢNG THEO CÔNG ĐOẠN (Đơn vị: Tấm)</h2>
         <div style="padding: 15px; border: 1px solid var(--primary); border-radius: 8px; background: #f0f8ff;">
@@ -247,7 +265,7 @@
                 <input type="text" id="colDateInput" placeholder="Ký tự cột (ví dụ: A)" value="A" style="width: 130px;">
 
                 <label>Dòng Tiêu Đề (Số dòng):</label>
-                <input type="number" id="headerRowInput" placeholder="VD: 3" value="3" min="1" style="width: 130px;">
+                <input type="number" id="headerRowInput" placeholder="VD: 3" value="5" min="1" style="width: 130px;">
             </div>
 
             <hr style="margin: 15px 0; border-top: 1px dashed #ccc;">
@@ -350,8 +368,12 @@
         return PROCESS_COLORS[key] || 'color-default';
     }
 
-    const OVEN_LIST = [1,2,3,4,5,6,7];
-    let ovenTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+    //const OVEN_LIST = [1,2,3,4,5,6,7];
+    //let ovenTemps = { 'Lò 1': '850', 'Lò 2': '850', 'Lò 3': '850', 'Lò 4': '850', 'Lò 5': '850', 'Lò 6': '850', 'Lò 7': '850' };
+    let ovenTemps = {};
+
+    const FURNACES_COLLECTION = 'furnaces';
+    let currentFurnaceList = []; // Biến lưu danh sách tên lò nung (ví dụ: Lò A, Lò B)
 
     // --- HÀM GỬI DISCORD ---
     function sendDiscordNotification(message) {
@@ -396,15 +418,19 @@
 
     // --- HÀM TÍNH TOÁN THỐNG KÊ HOÀN THÀNH ---
     function calculateMaintenanceStats(data, year, month) {
-        let stats = {
-            vesinhCompleted: 0,
-            profileCompleted: 0,
-            totalOvens: OVEN_LIST.length
-        };
+        const furnaceList = currentFurnaceList || [];
 
-        OVEN_LIST.forEach(id => {
-            const ovenName = `Lò ${id}`;
-            const curTemp = ovenTemps[ovenName] || '850';
+    let stats = {
+        vesinhCompleted: 0,
+        profileCompleted: 0,
+        totalOvens: furnaceList.length // <--- SỬA: Dùng furnaceList.length
+    };
+
+    furnaceList.forEach(ovenName => { // <--- SỬA: Lặp qua tên lò nung trực tiếp
+        // BỎ DÒNG const ovenName = `Lò ${id}`;
+
+        // Lấy nhiệt độ đã đồng bộ
+        const curTemp = ovenTemps[ovenName] || '850';
 
             // Check Vệ sinh
             let pathVS = `ovens.${ovenName}.${curTemp}.Vệ sinh.${year}.${month}.completed`;
@@ -915,9 +941,24 @@ html += `<table class="maintenance-table">
     </thead>
     <tbody>`;
 
+// --- BẮT ĐẦU: CHÈN LOGIC SẮP XẾP SỐ HỌC ---
+const sortedFurnaces = currentFurnaceList.slice().sort((a, b) => {
+    // 1. Trích xuất số từ chuỗi
+    // Dấu chấm hỏi (?) giúp tránh lỗi nếu tên lò nung không có số (ví dụ: 'Lò A')
+    const numA = parseInt(a.match(/(\d+)/)?.[0]);
+    const numB = parseInt(b.match(/(\d+)/)?.[0]);
+
+    // 2. Sắp xếp theo số (Nếu cả hai đều là số)
+    if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB; // Sắp xếp từ thấp đến cao (1, 2, ..., 10)
+    }
+
+    // 3. Nếu không tìm thấy số, quay lại sắp xếp theo chữ cái
+    return a.localeCompare(b);
+});
+
 // 1. RENDER LÒ (OVEN)
-OVEN_LIST.forEach(id => {
-    const ovenName = `Lò ${id}`;
+sortedFurnaces.forEach(ovenName => {
     // Lấy nhiệt độ đã đồng bộ
     const curTemp = ovenTemps[ovenName] || '850';
 
@@ -929,7 +970,10 @@ OVEN_LIST.forEach(id => {
     let itemPF = safeGet(data, pathPF) || { completed: false, date: null };
 
     // Lấy ghi chú
-    let pathNote = `ovens.${ovenName}.notes.${viewYear}.${viewMonth}`;
+    const safeYear = String(viewYear);
+    const safeMonth = String(viewMonth).padStart(2, '0'); // Đảm bảo luôn là 2 chữ số (VD: 05)
+
+    let pathNote = `ovens.${ovenName}.notes.${safeYear}.${safeMonth}`;
     let noteContent = safeGet(data, pathNote) || "";
 
     html += `<tr>
@@ -960,8 +1004,11 @@ OVEN_LIST.forEach(id => {
         </td>
 
         <td>
-            <input type="text" class="note-input" value="${noteContent}"
-                placeholder="Nhập ghi chú..." onblur="updateOvenNote('${ovenName}', this.value)">
+            <input type="text" class="note-input"
+                value="${noteContent.replace(/"/g, '&quot;')}"
+                placeholder="Nhập ghi chú..."
+                onblur="updateOvenNote('${ovenName}', this.value)"
+                onkeydown="if(event.key === 'Enter') this.blur()">
         </td>
     </tr>`;
 });
@@ -1108,13 +1155,52 @@ try {
 }
 }
 
-    // HÀM CHUNG: Cập nhật ghi chú
-    async function updateMaintNote(path, note) {
-        const update = {};
-        update[path] = note;
-
-        await db.collection('maintenance').doc('schedules').set(update, { merge: true });
+    async function updateOvenNote(ovenName, note) {
+    // 1. Kiểm tra đăng nhập
+    if (!firebase.auth().currentUser) {
+        console.error("🔴 LỖI BẢO MẬT: Chưa đăng nhập.");
+        alert("Vui lòng đăng nhập để lưu ghi chú.");
+        return;
     }
+
+    // 2. Chuẩn hóa thời gian (Quan trọng: Tháng phải có 2 chữ số 01, 02...)
+    const safeYear = String(viewYear);
+    const safeMonth = String(viewMonth).padStart(2, '0');
+
+    // 3. Tạo đường dẫn dữ liệu
+    const path = `ovens.${ovenName}.notes.${safeYear}.${safeMonth}`;
+
+    // Xử lý nội dung: Nếu xóa trắng thì lưu là null hoặc chuỗi rỗng
+    const finalNote = note.trim();
+
+    const updateData = {};
+    updateData[path] = finalNote;
+
+    try {
+        // --- SỬA LỖI TẠI ĐÂY ---
+        // Sử dụng .update() để Firebase hiểu dấu chấm là cấu trúc lồng nhau
+        await db.collection('maintenance').doc('schedules').update(updateData);
+
+        console.log(`✅ Đã lưu ghi chú Lò ${ovenName}: ${finalNote}`);
+    } catch (e) {
+        // Trường hợp document 'schedules' chưa từng được tạo, update sẽ lỗi
+        // Ta dùng set merge để tạo document trước, sau đó update lại
+        if (e.code === 'not-found') {
+            await db.collection('maintenance').doc('schedules').set({}, { merge: true });
+            await db.collection('maintenance').doc('schedules').update(updateData);
+        } else {
+            console.error("❌ Lỗi khi lưu ghi chú:", e);
+            alert("Không thể lưu ghi chú. Kiểm tra kết nối mạng!");
+        }
+    }
+}
+// Thêm hàm này vào cuối file script để xử lý phím Enter
+function handleNoteKeydown(event, ovenName) {
+    if (event.key === 'Enter') {
+        event.preventDefault(); // Chặn reload trang
+        event.target.blur();    // Bắt buộc lưu ngay lập tức
+    }
+}
 
     function hardResetMaintenance() {
         if(confirm("XÁC NHẬN: Bạn có chắc chắn muốn XÓA TOÀN BỘ dữ liệu bảo trì và khôi phục lại mặc định?")) {
@@ -1147,224 +1233,463 @@ try {
            alert("Lỗi: Không thể lưu thời gian mới lên server!");
        });
    }
+// Hàm tải danh sách lò nung từ Firebase khi trang được load
+async function initializeFurnaces() {
+    try {
+        const snapshot = await db.collection(FURNACES_COLLECTION).get();
+
+        const furnaces = snapshot.docs.map(doc => doc.data().name).filter(name => name);
+
+        if (furnaces.length === 0) {
+            console.warn("Chưa có lò nung nào trong Firebase. Vui lòng thêm mới.");
+        }
+
+        currentFurnaceList = furnaces; // Cập nhật biến global
+
+        // --- LOGIC CẬP NHẬT ovenTemps dựa trên danh sách mới ---
+        const defaultTemp = '850'; // Nhiệt độ mặc định
+        let newOvenTemps = {};
+
+        currentFurnaceList.forEach(furnaceName => {
+            // Giữ lại nhiệt độ cũ nếu có, nếu không thì dùng mặc định
+            newOvenTemps[furnaceName] = ovenTemps[furnaceName] || defaultTemp;
+        });
+        ovenTemps = newOvenTemps; // Cập nhật biến toàn cục ovenTemps
+        // --------------------------------------------------------
+
+        // Cập nhật cả dropdown thêm/bảo trì VÀ dropdown xóa
+        updateFurnaceDropdowns(currentFurnaceList);
+        updateDeleteFurnaceDropdown(currentFurnaceList);
+
+    } catch (error) {
+        console.error("Lỗi khi tải danh sách lò nung từ Firebase:", error);
+    }
+}
+// Hàm 1: Thêm lò nung vào Firestore
+async function addFurnaceToFirebase(furnaceName) {
+    try {
+        await db.collection(FURNACES_COLLECTION).add({
+            name: furnaceName,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return true;
+    } catch (error) {
+        console.error("Lỗi khi ghi dữ liệu lò nung lên Firebase:", error);
+        return false;
+    }
+}
+
+// Hàm 2: Xóa lò nung khỏi Firestore (Yêu cầu mật khẩu)
+async function deleteFurnaceFromFirebase(furnaceName) {
+    try {
+        const snapshot = await db.collection(FURNACES_COLLECTION)
+                                 .where('name', '==', furnaceName)
+                                 .limit(1)
+                                 .get();
+
+        if (snapshot.empty) {
+            console.error(`Không tìm thấy lò nung: ${furnaceName} để xóa.`);
+            return false;
+        }
+
+        const docId = snapshot.docs[0].id;
+        await db.collection(FURNACES_COLLECTION).doc(docId).delete();
+
+        return true;
+    } catch (error) {
+        console.error("Lỗi khi xóa dữ liệu lò nung khỏi Firebase:", error);
+        return false;
+    }
+}
+
+// Hàm 3: Cập nhật các dropdown LÒ NUNG chính (Bảo trì/Sản lượng)
+function updateFurnaceDropdowns(furnaces) {
+    // CẬP NHẬT ID THỰC TẾ CỦA DROPDOWN TẠI ĐÂY
+    const selectIds = ['furnace-select-maintenance', 'furnace-select-production'];
+
+    // BẮT ĐẦU: LOGIC SẮP XẾP SỐ HỌC
+    const sortedFurnaces = furnaces.slice().sort((a, b) => {
+        // 1. Trích xuất số từ chuỗi (ví dụ: lấy '1' từ 'Lò 1' hoặc 'Lò-10')
+        const numA = parseInt(a.match(/(\d+)/)?.[0]);
+        const numB = parseInt(b.match(/(\d+)/)?.[0]);
+
+        // 2. Nếu cả hai đều là số (phổ biến cho Lò 1, Lò 2,...)
+        if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB; // Sắp xếp theo số (1 < 2 < 10)
+        }
+
+        // 3. Nếu không tìm thấy số, quay lại sắp xếp theo chữ cái (cho Lò A, Lò B)
+        return a.localeCompare(b);
+    });
+    // KẾT THÚC: LOGIC SẮP XẾP SỐ HỌC
+
+    selectIds.forEach(id => {
+        const selectElement = document.getElementById(id);
+        if (selectElement) {
+            selectElement.innerHTML = '';
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "--- Chọn Lò Nung ---";
+            selectElement.appendChild(defaultOption);
+
+            sortedFurnaces.forEach(furnace => {
+                const option = document.createElement('option');
+                option.value = furnace;
+                option.textContent = furnace;
+                selectElement.appendChild(option);
+            });
+        }
+    });
+}
+
+// Hàm 4: Cập nhật riêng cho dropdown XÓA LÒ NUNG
+function updateDeleteFurnaceDropdown(furnaces) {
+    const selectElement = document.getElementById('furnace-select-to-delete');
+    if (!selectElement) return;
+
+    selectElement.innerHTML = '';
+
+    // BẮT ĐẦU: LOGIC SẮP XẾP SỐ HỌC
+    const sortedFurnaces = furnaces.slice().sort((a, b) => {
+        // 1. Trích xuất số từ chuỗi
+        // Dấu chấm hỏi (?) trong Regex là optional chaining, giúp tránh lỗi nếu không tìm thấy số
+        const numA = parseInt(a.match(/(\d+)/)?.[0]);
+        const numB = parseInt(b.match(/(\d+)/)?.[0]);
+
+        // 2. Sắp xếp theo số (Nếu cả hai đều là số)
+        if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB; // Sắp xếp theo số (1 < 2 < 10)
+        }
+
+        // 3. Nếu không tìm thấy số (ví dụ: 'Lò A'), quay lại sắp xếp theo chữ cái
+        return a.localeCompare(b);
+    });
+    // KẾT THÚC: LOGIC SẮP XẾP SỐ HỌC
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = "";
+    defaultOption.textContent = "--- Chọn Lò Nung Cần Xóa ---";
+    selectElement.appendChild(defaultOption);
+
+    sortedFurnaces.forEach(furnace => {
+        const option = document.createElement('option');
+        option.value = furnace;
+        option.textContent = furnace;
+        selectElement.appendChild(option);
+    });
+}
+
+
+// Hàm 5: Thiết lập tất cả sự kiện click cho các nút Thêm/Xóa
+function setupAddFurnaceListeners() {
+    // Thêm Lò Nung
+    const addBtn = document.getElementById('add-furnace-btn');
+    const dialog = document.getElementById('add-furnace-dialog');
+    const saveBtn = document.getElementById('save-new-furnace-btn');
+    const cancelBtn = document.getElementById('cancel-add-furnace-btn');
+    const nameInput = document.getElementById('new-furnace-name');
+
+    // Xóa Lò Nung
+    const deleteBtn = document.getElementById('delete-furnace-btn');
+    const deleteDialog = document.getElementById('delete-furnace-dialog');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+    const deletePassInput = document.getElementById('delete-password-input');
+    const furnaceSelectToDelete = document.getElementById('furnace-select-to-delete');
+
+    // 1. Logic cho nút THÊM LÒ NUNG (Giống hướng dẫn trước)
+    addBtn.addEventListener('click', () => {
+        dialog.style.display = 'block';
+        addBtn.style.display = 'none';
+        nameInput.value = '';
+        nameInput.focus();
+    });
+    cancelBtn.addEventListener('click', () => {
+        dialog.style.display = 'none';
+        addBtn.style.display = 'inline-block';
+    });
+    saveBtn.addEventListener('click', async () => {
+        const newFurnaceName = nameInput.value.trim();
+        if (newFurnaceName === "") { alert("Tên lò nung không được để trống."); return; }
+        if (currentFurnaceList.map(f => f.toLowerCase()).includes(newFurnaceName.toLowerCase())) { alert(`Lò nung "${newFurnaceName}" đã tồn tại.`); return; }
+
+        saveBtn.disabled = true;
+
+        const success = await addFurnaceToFirebase(newFurnaceName);
+
+        if (success) {
+            currentFurnaceList.push(newFurnaceName);
+            updateFurnaceDropdowns(currentFurnaceList);
+            updateDeleteFurnaceDropdown(currentFurnaceList); // Cập nhật dropdown Xóa
+
+            dialog.style.display = 'none';
+            addBtn.style.display = 'inline-block';
+            alert(`Đã thêm lò nung "${newFurnaceName}" vào Firebase thành công!`);
+            sendDiscordNotification(`[THÔNG BÁO] Lò nung mới: ${newFurnaceName} đã được thêm vào hệ thống.`);
+        } else {
+            alert(`Lỗi khi thêm lò nung "${newFurnaceName}". Vui lòng thử lại.`);
+        }
+        saveBtn.disabled = false;
+    });
+
+    // 2. Logic cho nút XÓA LÒ NUNG (Đã thêm xác thực mật khẩu)
+    deleteBtn.addEventListener('click', () => {
+        deleteDialog.style.display = 'block';
+        deletePassInput.value = '';
+        updateDeleteFurnaceDropdown(currentFurnaceList);
+    });
+
+    cancelDeleteBtn.addEventListener('click', () => {
+        deleteDialog.style.display = 'none';
+    });
+
+    confirmDeleteBtn.addEventListener('click', async () => {
+        const furnaceToDelete = furnaceSelectToDelete.value;
+        const password = deletePassInput.value;
+        const currentUser = auth.currentUser;
+
+        if (!furnaceToDelete) { alert("Vui lòng chọn lò nung cần xóa."); return; }
+        if (!password) { alert("Vui lòng nhập mật khẩu để xác nhận."); return; }
+        if (!currentUser || !currentUser.email) { alert("Bạn chưa đăng nhập hoặc phiên đăng nhập đã hết hạn."); return; }
+
+        if (!confirm(`Bạn CÓ CHẮC chắn muốn xóa lò nung "${furnaceToDelete}" không?`)) { return; }
+
+        confirmDeleteBtn.disabled = true;
+
+        try {
+            // Tái xác thực người dùng bằng email và mật khẩu
+            const credential = firebase.auth.EmailAuthProvider.credential(
+                currentUser.email, password
+            );
+            await currentUser.reauthenticateWithCredential(credential);
+
+            // Xác thực thành công -> Tiến hành Xóa
+            const success = await deleteFurnaceFromFirebase(furnaceToDelete);
+
+            if (success) {
+                currentFurnaceList = currentFurnaceList.filter(f => f !== furnaceToDelete);
+                updateFurnaceDropdowns(currentFurnaceList);
+                updateDeleteFurnaceDropdown(currentFurnaceList);
+
+                deleteDialog.style.display = 'none';
+                alert(`Đã xóa lò nung "${furnaceToDelete}" thành công!`);
+                sendDiscordNotification(`[CẢNH BÁO] Lò nung: ${furnaceToDelete} đã bị xóa khỏi hệ thống bởi ${currentUser.email}.`);
+            } else {
+                alert("Lỗi khi xóa lò nung trên Firebase.");
+            }
+
+        } catch (error) {
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                alert("Mật khẩu không chính xác. Xóa thất bại.");
+            } else {
+                console.error("Lỗi tái xác thực/Xóa:", error);
+                alert(`Lỗi: ${error.message}`);
+            }
+        } finally {
+            confirmDeleteBtn.disabled = false;
+        }
+    });
+}
 
 
     // 8. HỆ THỐNG PHÂN TÍCH SẢN LƯỢNG (Excel Reader, Data Processor)
 
     // Đọc dữ liệu từ file Excel
-    function readExcelFile(file, headerRowIndex) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    // Sử dụng raw: false và cellDates: true để lấy định dạng ngày tháng tốt nhất
-                    const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
+ function readExcelFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'dd/mm/yyyy' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
 
-                    // 1. ĐỌC DÒNG TIÊU ĐỀ
-                    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, cellDates: true });
-                    const headerRowData = rawRows[headerRowIndex - 1];
-                    if (!headerRowData || headerRowData.length === 0) {
-                        reject(new Error(`Không tìm thấy dữ liệu ở Dòng Tiêu Đề (${headerRowIndex}) trong file: ${file.name}`));
-                        return;
-                    }
+                // Đọc toàn bộ sheet dưới dạng Mảng các Mảng (Array of Arrays)
+                // VD: [ ["Lot", "Ten"], ["CKP...", "Nam"] ]
+                // header: 1 giúp lấy dữ liệu theo chỉ số cột (0, 1, 2...) thay vì tên header
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                    header: 1,
+                    raw: false,
+                    defval: "" // Nếu ô trống thì trả về chuỗi rỗng
+                });
 
-                    // TÁI TẠO MAP KÝ TỰ CỘT -> TÊN HEADER THỰC TẾ
-                    let currentColMap = {};
-                    headerRowData.forEach((headerName, C) => {
-                        if (headerName) {
-                            const colLetter = XLSX.utils.encode_col(C);
-                            // Lưu vào map: { "A": "Lot_ID", "B": "Process" ...}
-                            currentColMap[colLetter.toUpperCase()] = headerName.toString().trim();
-                        }
-                    });
-
-                    // 2. ĐỌC DỮ LIỆU CHÍNH (Bỏ qua các dòng trước dòng header)
-                    const fileData = XLSX.utils.sheet_to_json(worksheet, { range: headerRowIndex - 1, raw: false, cellDates: true });
-
-                    resolve({ fileData, currentColMap });
-
-                } catch (error) {
-                    reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
-                }
-            };
-            reader.onerror = (error) => reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
-            reader.readAsArrayBuffer(file);
-        });
-    }
+                resolve(jsonData);
+            } catch (error) {
+                reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
+            }
+        };
+        reader.onerror = (error) => reject(new Error(`Lỗi đọc file ${file.name}: ${error.message}`));
+        reader.readAsArrayBuffer(file);
+    });
+}
 
     // Hàm xử lý khi chọn file (Đầu VÀO hoặc Đầu RA)
-    async function handleFileSelection(event, type) {
-        document.getElementById('excelError').innerText = '';
-        document.getElementById('productionStatsContainer').style.display = 'none';
-        document.getElementById('exportBtn').style.display = 'none';
-        document.getElementById('captureBtn').style.display = 'none';
+ async function handleFileSelection(event, type) {
+    document.getElementById('excelError').innerText = '';
+    document.getElementById('productionStatsContainer').style.display = 'none';
+    document.getElementById('exportBtn').style.display = 'none';
+    document.getElementById('captureBtn').style.display = 'none';
 
-        const headerRowIndex = parseInt(document.getElementById('headerRowInput').value) || 1;
-        const files = Array.from(event.target.files);
-        let allData = [];
-        let currentColMap = null;
-        const fileListEl = document.getElementById(`fileList_${type}`);
+    const files = Array.from(event.target.files);
+    let allData = []; // Mảng chứa dữ liệu gộp
+    const fileListEl = document.getElementById(`fileList_${type}`);
 
-        fileListEl.innerHTML = files.map(f => `<span>${f.name}</span>`).join(', ');
-        fileListEl.style.color = files.length > 0 ? 'green' : 'red';
-        if (files.length === 0) fileListEl.innerHTML = 'Chưa chọn file.';
+    fileListEl.innerHTML = files.map(f => `<span>${f.name}</span>`).join(', ');
+    fileListEl.style.color = files.length > 0 ? 'green' : 'red';
+    if (files.length === 0) fileListEl.innerHTML = 'Chưa chọn file.';
 
-        if (type === 'IN') inputFiles = files;
-        else outputFiles = files;
+    if (type === 'IN') inputFiles = files;
+    else outputFiles = files;
 
-        if (files.length === 0) {
-            if (type === 'IN') allInputData = [];
-            else allOutputData = [];
-            updatePersonSelectBox();
-            return;
-        }
-
-        try {
-            // Đọc file lần lượt
-            const results = await Promise.all(files.map(file => readExcelFile(file, headerRowIndex)));
-
-            results.forEach((res, index) => {
-                allData = allData.concat(res.fileData);
-                // Lấy map cột từ file đầu tiên (giả định các file có cấu trúc giống nhau)
-                if (index === 0) {
-                    currentColMap = res.currentColMap;
-                }
-            });
-
-        } catch (error) {
-            document.getElementById('excelError').innerText = error.message;
-            // Nếu lỗi, xóa hết dữ liệu đã đọc
-            if (type === 'IN') { allInputData = []; inputFiles = []; }
-            else { allOutputData = []; outputFiles = []; }
-            fileListEl.innerHTML = '<span style="color:red;">Lỗi tải file.</span>';
-            updatePersonSelectBox();
-            return;
-        }
-
-        if (files.length > 0) {
-            document.getElementById('excelError').innerText = `✅ Đã tải thành công ${files.length} file cho Đầu ${type==='IN'?'VÀO':'RA'}. Tổng ${allData.length} dòng dữ liệu.`;
-        }
-
-        // Lưu trữ dữ liệu và map tương ứng
-        if (type === 'IN') {
-            allInputData = allData;
-            if (currentColMap) inputColMap = currentColMap; // LƯU MAP CHO ĐẦU VÀO
-        } else {
-            allOutputData = allData;
-            if (currentColMap) outputColMap = currentColMap; // LƯU MAP CHO ĐẦU RA
-        }
-
-        // Cập nhật thông báo cấu hình cột
-        if (files.length > 0 && currentColMap) {
-            document.getElementById('excelError').innerText += `\n\n💡 **Tên cột chuẩn cho Đầu ${type==='IN'?'VÀO':'RA'} đã được thiết lập.**`;
-        }
-
-        // Cập nhật danh sách Người TH
+    if (files.length === 0) {
+        if (type === 'IN') allInputData = [];
+        else allOutputData = [];
         updatePersonSelectBox();
+        return;
     }
+
+    try {
+        // Đọc tất cả file song song
+        const results = await Promise.all(files.map(file => readExcelFile(file)));
+
+        // Gộp dữ liệu lại (chỉ gộp mảng)
+        results.forEach(fileData => {
+            allData = allData.concat(fileData);
+        });
+
+    } catch (error) {
+        document.getElementById('excelError').innerText = error.message;
+        if (type === 'IN') { allInputData = []; inputFiles = []; }
+        else { allOutputData = []; outputFiles = []; }
+        fileListEl.innerHTML = '<span style="color:red;">Lỗi tải file.</span>';
+        updatePersonSelectBox();
+        return;
+    }
+
+    if (files.length > 0) {
+        document.getElementById('excelError').innerText = `✅ Đã tải xong ${files.length} file (Đầu ${type==='IN'?'VÀO':'RA'}). Tổng ${allData.length} dòng.`;
+    }
+
+    // Lưu dữ liệu thô
+    if (type === 'IN') allInputData = allData;
+    else allOutputData = allData;
+
+    updatePersonSelectBox();
+}
 
     // Cập nhật danh sách người làm việc từ dữ liệu đã tải
-    function updatePersonSelectBox() {
-        const personSet = new Set();
-        const personColLetter = document.getElementById('colPersonInput').value.trim().toUpperCase();
+ function updatePersonSelectBox() {
+    const personSet = new Set();
+    // Lấy ký tự cột người dùng nhập (VD: "R")
+    const personColLetter = document.getElementById('colPersonInput').value.trim().toUpperCase();
+    // Chuyển "R" thành chỉ số mảng (VD: 17)
+    const personColIndex = XLSX.utils.decode_col(personColLetter);
+    const headerRows = parseInt(document.getElementById('headerRowInput').value) || 0;
 
-        const getPersonName = (data, map) => {
-            if (!map || Object.keys(map).length === 0) return null;
-            const personColName = map[personColLetter];
-            if (!personColName) return null;
+    const getPersonName = (data) => {
+        if (!data || data.length === 0) return;
 
-            data.forEach(row => {
-                const name = row[personColName];
-                if (name && typeof name === 'string' && name.trim()) {
-                    personSet.add(name.trim());
-                }
-            });
-        };
+        // Duyệt qua các dòng, bỏ qua dòng tiêu đề
+        data.forEach((row, index) => {
+            // Nếu dòng hiện tại <= số dòng tiêu đề thì bỏ qua (vì đó là header)
+            // Lưu ý: index bắt đầu từ 0. Nếu headerRows = 3 (dòng 1,2,3) thì ta bắt đầu lấy từ index 3 (dòng 4)
+            if (index < headerRows) return;
 
-        getPersonName(allInputData, inputColMap);
-        getPersonName(allOutputData, outputColMap);
-
-        const personSelect = document.getElementById('personSelect');
-        const currentSelected = personSelect.value;
-        personSelect.innerHTML = '<option value="all">-- Tất Cả Mọi Người --</option>';
-
-        const sortedPeople = Array.from(personSet).sort();
-
-        sortedPeople.forEach(person => {
-            const option = document.createElement('option');
-            option.value = person;
-            option.textContent = person;
-            personSelect.appendChild(option);
+            const name = row[personColIndex]; // Lấy dữ liệu trực tiếp từ vị trí cột
+            if (name && typeof name === 'string' && name.trim()) {
+                personSet.add(name.trim());
+            }
         });
+    };
 
-        // Giữ lại lựa chọn hiện tại nếu còn trong danh sách
-        if (personSet.has(currentSelected)) {
-            personSelect.value = currentSelected;
-        }
-    }
+    getPersonName(allInputData);
+    getPersonName(allOutputData);
+
+    const personSelect = document.getElementById('personSelect');
+    const currentSelected = personSelect.value;
+    personSelect.innerHTML = '<option value="all">-- Tất Cả Mọi Người --</option>';
+
+    const sortedPeople = Array.from(personSet).sort();
+    sortedPeople.forEach(person => {
+        const option = document.createElement('option');
+        option.value = person;
+        option.textContent = person;
+        personSelect.appendChild(option);
+    });
+
+    if (personSet.has(currentSelected)) personSelect.value = currentSelected;
+}
 
     // Xử lý dữ liệu thô (Raw Data) để tạo thống kê (Stats)
-    function processData(data, colNames, selectedPerson, selectedMonth, selectedYear) {
-        let stats = {};
-        let grandTotal = 0;
+ function processData(data, colIndices, selectedPerson, selectedMonth, selectedYear, headerRows) {
+    let stats = {};
+    let grandTotal = 0;
 
-        if (!colNames.prodColName || !colNames.personColName || !colNames.processColName || !colNames.dateColName) {
-            console.error("Thiếu tên cột!");
-            return { stats: {}, grandTotal: 0 };
+    data.forEach((row, index) => {
+        // Bỏ qua các dòng tiêu đề
+        if (index < headerRows) return;
+
+        // Lấy dữ liệu theo chỉ số cột (0, 1, 2...)
+        const person = row[colIndices.person];
+        const process = row[colIndices.process];
+        const dateRaw = row[colIndices.date];
+        const panelsStr = row[colIndices.prod]; // Có thể là string "100" hoặc number 100
+
+        // Chuyển đổi sản lượng sang số
+        let panels = 0;
+        if (typeof panelsStr === 'number') panels = panelsStr;
+        else if (typeof panelsStr === 'string') panels = parseFloat(panelsStr.replace(/,/g, '')); // Xóa dấu phẩy nếu có
+
+        // Xử lý ngày tháng
+        let rowDate = null;
+        if (dateRaw) {
+             // Thư viện XLSX với cellDates: true thường trả về Object Date
+             if (dateRaw instanceof Date) {
+                 rowDate = dateRaw;
+             } else if (typeof dateRaw === 'string') {
+                 // Cố gắng parse chuỗi ngày (VD: "25/11/2025")
+                 const parts = dateRaw.split('/');
+                 if (parts.length === 3) {
+                     // Lưu ý: new Date(năm, tháng-1, ngày)
+                     rowDate = new Date(parts[2], parts[1] - 1, parts[0]);
+                 } else {
+                     rowDate = new Date(dateRaw);
+                 }
+             }
         }
 
-        data.forEach(row => {
-            // Lấy giá trị
-            const person = row[colNames.personColName]?.toString().trim();
-            const process = row[colNames.processColName]?.toString().trim();
-            const dateRaw = row[colNames.dateColName];
-            const panels = parseFloat(row[colNames.prodColName]);
+        // Kiểm tra hợp lệ
+        const isValid = person && process && !isNaN(panels) && panels > 0 && rowDate && !isNaN(rowDate.getTime());
+        if (!isValid) return;
 
-            // Xử lý ngày tháng
-            let rowDate = null;
-            if (dateRaw) {
-                // Excel dates are sometimes stored as numbers if not formatted correctly
-                if (typeof dateRaw === 'number') {
-                    // Excel Epoch is 1899-12-30
-                    rowDate = new Date(Date.UTC(0, 0, dateRaw - 1));
-                } else if (dateRaw instanceof Date && !isNaN(dateRaw)) {
-                    rowDate = dateRaw;
-                } else if (typeof dateRaw === 'string') {
-                     rowDate = new Date(dateRaw);
-                }
+        const rowMonth = String(rowDate.getMonth() + 1).padStart(2, '0');
+        const rowYear = rowDate.getFullYear().toString();
+
+        // Chuẩn hóa tên người để so sánh (Trim)
+        const personStr = String(person).trim();
+        const processStr = String(process).trim();
+
+        const monthMatch = rowMonth === selectedMonth;
+        const yearMatch = rowYear === selectedYear;
+        const personMatch = selectedPerson === 'all' || personStr === selectedPerson;
+
+        if (monthMatch && yearMatch && personMatch) {
+            processList.add(processStr); // Thêm vào danh sách công đoạn toàn cục
+
+            if (!stats[personStr]) {
+                stats[personStr] = { grandTotal: 0 };
             }
 
-            // Kiểm tra điều kiện lọc
-            const isValid = person && process && !isNaN(panels) && panels > 0 && rowDate && !isNaN(rowDate.getTime());
-            if (!isValid) return;
+            stats[personStr][processStr] = (stats[personStr][processStr] || 0) + panels;
+            stats[personStr].grandTotal += panels;
+            grandTotal += panels;
+        }
+    });
 
-            const rowMonth = String(rowDate.getMonth() + 1).padStart(2, '0');
-            const rowYear = rowDate.getFullYear().toString();
-
-            const monthMatch = rowMonth === selectedMonth;
-            const yearMatch = rowYear === selectedYear;
-            const personMatch = selectedPerson === 'all' || person === selectedPerson;
-
-            if (monthMatch && yearMatch && personMatch) {
-                // Thêm vào danh sách công đoạn chung
-                processList.add(process);
-
-                // Cập nhật thống kê
-                if (!stats[person]) {
-                    stats[person] = { grandTotal: 0 };
-                }
-
-                stats[person][process] = (stats[person][process] || 0) + panels;
-                stats[person].grandTotal += panels;
-                grandTotal += panels;
-            }
-        });
-
-        return { stats, grandTotal };
-    }
+    return { stats, grandTotal };
+}
 
     // Kết hợp thống kê từ file IN và OUT
     function combineStats(statsIn, statsOut) {
@@ -1532,126 +1857,90 @@ document.getElementById('captureBtn').style.display = 'inline-block';
 }
 
     // Hàm chính tính toán sản lượng
-    function calculateProduction() {
-        document.getElementById('productionStatsContainer').style.display = 'none';
-        document.getElementById('productionStatsContainer').innerHTML = '';
-        document.getElementById('exportBtn').style.display = 'none';
-        document.getElementById('captureBtn').style.display = 'none';
-        document.getElementById('excelError').innerText = '';
+ function calculateProduction() {
+    document.getElementById('productionStatsContainer').style.display = 'none';
+    document.getElementById('productionStatsContainer').innerHTML = '';
+    document.getElementById('exportBtn').style.display = 'none';
+    document.getElementById('captureBtn').style.display = 'none';
+    document.getElementById('excelError').innerText = '';
 
-        if (allInputData.length === 0 && allOutputData.length === 0) {
-            document.getElementById('excelError').innerText = 'Vui lòng tải ít nhất một file (Đầu VÀO hoặc Đầu RA).';
-            return;
-        }
-
-        // **KIỂM TRA MAP**: Chỉ cần map tồn tại nếu có dữ liệu cho loại đó
-        if (allInputData.length > 0 && Object.keys(inputColMap).length === 0) {
-            document.getElementById('excelError').innerText = 'Lỗi: Vui lòng tải lại file ĐẦU VÀO đầu tiên để xác định Tên Header.';
-            return;
-        }
-        if (allOutputData.length > 0 && Object.keys(outputColMap).length === 0) {
-            document.getElementById('excelError').innerText = 'Lỗi: Vui lòng tải lại file ĐẦU RA đầu tiên để xác định Tên Header.';
-            return;
-        }
-
-        const prodColLetter = document.getElementById('colProdInput').value.trim().toUpperCase();
-        const personColLetter = document.getElementById('colPersonInput').value.trim().toUpperCase();
-        const processColLetter = document.getElementById('colProcessInput').value.trim().toUpperCase();
-        const dateColLetter = document.getElementById('colDateInput').value.trim().toUpperCase();
-
-        // *** TẠO HAI BỘ TÊN CỘT RIÊNG BIỆT ***
-        const getColNames = (map) => {
-            // Chỉ trả về tên cột nếu có dữ liệu và map có giá trị
-            if (Object.keys(map).length === 0) return {};
-            return {
-                prodColName: map[prodColLetter],
-                personColName: map[personColLetter],
-                processColName: map[processColLetter],
-                dateColName: map[dateColLetter],
-            };
-        };
-
-        const inputColNames = getColNames(inputColMap);
-        const outputColNames = getColNames(outputColMap);
-
-        // Kiểm tra xem tất cả các cột cần thiết có được map thành công không
-        const checkMissingCols = (colNames) => {
-            const missing = [];
-            if (!colNames.prodColName) missing.push(`Cột Sản Lượng (${prodColLetter})`);
-            if (!colNames.personColName) missing.push(`Cột Người TH (${personColLetter})`);
-            if (!colNames.processColName) missing.push(`Cột Công Đoạn (${processColLetter})`);
-            if (!colNames.dateColName) missing.push(`Cột Ngày Tháng (${dateColLetter})`);
-            return missing;
-        };
-
-        const missingIn = allInputData.length > 0 ? checkMissingCols(inputColNames) : [];
-        const missingOut = allOutputData.length > 0 ? checkMissingCols(outputColNames) : [];
-
-        if (missingIn.length > 0 || missingOut.length > 0) {
-            let errorMsg = '⚠️ Lỗi cấu hình cột! Không tìm thấy tiêu đề cột tương ứng. Vui lòng kiểm tra lại Ký Tự Cột và Dòng Tiêu Đề đã nhập.\n';
-            if (missingIn.length > 0) errorMsg += ` - **File Đầu VÀO**: ${missingIn.join(', ')}\n`;
-            if (missingOut.length > 0) errorMsg += ` - **File Đầu RA**: ${missingOut.join(', ')}\n`;
-            document.getElementById('excelError').innerHTML = errorMsg.replace(/\n/g, '<br>');
-            return;
-        }
-
-        // Reset global process list
-        processList = new Set();
-        const selectedPerson = document.getElementById('personSelect').value;
-        const selectedMonth = document.getElementById('prodMonth').value;
-        const selectedYear = document.getElementById('prodYear').value;
-
-        // 1. TÍNH TOÁN ĐẦU VÀO (Dùng inputColNames)
-        const inputResults = allInputData.length > 0 ? processData(allInputData, inputColNames, selectedPerson, selectedMonth, selectedYear) : { stats: {}, grandTotal: 0 };
-
-        // 2. TÍNH TOÁN ĐẦU RA (Dùng outputColNames)
-        const outputResults = allOutputData.length > 0 ? processData(allOutputData, outputColNames, selectedPerson, selectedMonth, selectedYear) : { stats: {}, grandTotal: 0 };
-
-        // 3. TÍNH TOÁN TỔNG (IN + OUT)
-        const combinedResults = combineStats(inputResults.stats, outputResults.stats);
-        const grandTotalPanels = combinedResults.grandTotal;
-
-        // 4. KIỂM TRA LỖI CUỐI CÙNG
-        if (combinedResults.grandTotal === 0) {
-            // Cập nhật thông báo lỗi để phản ánh logic mới
-            const sampleColName = inputColNames.prodColName || outputColNames.prodColName || 'Chưa rõ';
-            const sampleDateName = inputColNames.dateColName || outputColNames.dateColName || 'Chưa rõ';
-
-            let errorMsg = `⚠️ Không tìm thấy dữ liệu hợp lệ nào cho điều kiện đã chọn (Tháng ${selectedMonth}/${selectedYear}`;
-            if (selectedPerson !== 'all') errorMsg += ` và Người TH: ${selectedPerson}`;
-            errorMsg += `).\n\nVui lòng kiểm tra:\n`;
-            errorMsg += `- **Ngày tháng** trong file có khớp với định dạng '${sampleDateName}' và khoảng thời gian T${selectedMonth}/${selectedYear} không.\n`;
-            errorMsg += `- **Cột Sản Lượng** ('${sampleColName}') có chứa giá trị số (Tấm) > 0 không.`;
-
-            document.getElementById('excelError').innerHTML = errorMsg.replace(/\n/g, '<br>');
-            return;
-        }
-
-        // 5. CHUẨN BỊ DỮ LIỆU ĐỂ RENDER
-        const statsData = {
-            input: {
-                title: 'BÁO CÁO SẢN LƯỢNG ĐẦU VÀO',
-                data: inputResults.stats,
-                total: inputResults.grandTotal,
-                files: inputFiles.map(f => f.name).join(', ') || 'Không có file',
-            },
-            output: {
-                title: 'BÁO CÁO SẢN LƯỢNG ĐẦU RA',
-                data: outputResults.stats,
-                total: outputResults.grandTotal,
-                files: outputFiles.map(f => f.name).join(', ') || 'Không có file',
-            },
-            total: {
-                title: `BÁO CÁO TỔNG HỢP SẢN LƯỢNG T${selectedMonth}/${selectedYear}`,
-                data: combinedResults.stats,
-                total: combinedResults.grandTotal,
-                files: 'Tổng hợp từ File IN và OUT',
-            }
-        };
-
-        // 6. RENDER
-        renderStatsTables(statsData, selectedMonth, selectedYear);
+    if (allInputData.length === 0 && allOutputData.length === 0) {
+        document.getElementById('excelError').innerText = 'Vui lòng tải ít nhất một file.';
+        return;
     }
+
+    // 1. Lấy và Chuyển đổi Ký Tự Cột (A, B, H...) sang Số (0, 1, 7...)
+    const getIndex = (id) => {
+        const val = document.getElementById(id).value.trim().toUpperCase();
+        return val ? XLSX.utils.decode_col(val) : -1;
+    };
+
+    const colIndices = {
+        prod: getIndex('colProdInput'),     // VD: H -> 7
+        person: getIndex('colPersonInput'), // VD: R -> 17
+        process: getIndex('colProcessInput'),
+        date: getIndex('colDateInput')
+    };
+
+    // Kiểm tra xem người dùng có nhập đủ cột không
+    if (colIndices.prod < 0 || colIndices.person < 0 || colIndices.process < 0 || colIndices.date < 0) {
+        document.getElementById('excelError').innerText = '❌ Vui lòng nhập đầy đủ Ký tự cột (A, B, C...) cho các trường.';
+        return;
+    }
+
+    const headerRows = parseInt(document.getElementById('headerRowInput').value) || 0;
+    const selectedPerson = document.getElementById('personSelect').value;
+    const selectedMonth = document.getElementById('prodMonth').value;
+    const selectedYear = document.getElementById('prodYear').value;
+
+    processList = new Set(); // Reset danh sách công đoạn
+
+    // 2. Tính toán (Không cần map tên header nữa)
+    const inputResults = allInputData.length > 0
+        ? processData(allInputData, colIndices, selectedPerson, selectedMonth, selectedYear, headerRows)
+        : { stats: {}, grandTotal: 0 };
+
+    const outputResults = allOutputData.length > 0
+        ? processData(allOutputData, colIndices, selectedPerson, selectedMonth, selectedYear, headerRows)
+        : { stats: {}, grandTotal: 0 };
+
+    // 3. Kết hợp kết quả
+    const combinedResults = combineStats(inputResults.stats, outputResults.stats);
+
+    // 4. Kiểm tra kết quả rỗng
+    if (combinedResults.grandTotal === 0) {
+        let errorMsg = `⚠️ Không tìm thấy dữ liệu cho T${selectedMonth}/${selectedYear}`;
+        if (selectedPerson !== 'all') errorMsg += ` của ${selectedPerson}`;
+        errorMsg += `.\n\nHãy kiểm tra: \n1. Số dòng tiêu đề có đúng không? (Hiện tại đang bỏ qua ${headerRows} dòng đầu).\n2. Cột ngày tháng trong Excel có đúng định dạng không?`;
+
+        document.getElementById('excelError').innerText = errorMsg;
+        return;
+    }
+
+    // 5. Chuẩn bị dữ liệu hiển thị
+    const statsData = {
+        input: {
+            title: 'BÁO CÁO SẢN LƯỢNG ĐẦU VÀO',
+            data: inputResults.stats,
+            total: inputResults.grandTotal,
+            files: inputFiles.map(f => f.name).join(', ')
+        },
+        output: {
+            title: 'BÁO CÁO SẢN LƯỢNG ĐẦU RA',
+            data: outputResults.stats,
+            total: outputResults.grandTotal,
+            files: outputFiles.map(f => f.name).join(', ')
+        },
+        total: {
+            title: `BÁO CÁO TỔNG HỢP SẢN LƯỢNG T${selectedMonth}/${selectedYear}`,
+            data: combinedResults.stats,
+            total: combinedResults.grandTotal,
+            files: 'Tổng hợp'
+        }
+    };
+
+    renderStatsTables(statsData, selectedMonth, selectedYear);
+}
 
     /**
 * Xuất dữ liệu sản lượng từ các bảng DAU_VAO, DAU_RA và TONG_HOP ra file Excel.
@@ -1849,6 +2138,9 @@ sendDiscordNotification(`📊 **Đã xuất file báo cáo Sản Lượng T${mon
              // Đính kèm hàm handleLogout vào sự kiện click
              logoutBtn.addEventListener('click', handleLogout);
         }
+
+        initializeFurnaces(); //tải danh sách lò nung
+        setupAddFurnaceListeners(); // Thiết lập sự kiện cho nút Thêm/Xóa Lò Nung
     });
 
 
