@@ -58,7 +58,7 @@
         .task-cell input[type="date"] { border: 1px solid #ddd; padding: 3px; border-radius: 4px; font-size: 12px; width: 110px; transition: 0.2s; }
         .hidden-date { opacity: 0; pointer-events: none; width: 0 !important; padding: 0 !important; border: none !important; }
 
-        /* --- CẬP NHẬT: NOTE INPUT LINH ĐỘNG --- */
+        /* --- NOTE INPUT LINH ĐỘNG --- */
         .note-input {
             min-width: 150px;
             width: auto;
@@ -235,6 +235,9 @@
                 <div class="config-row" style="background: #fff3cd;">
                     <span>Cấu hình:</span>
                     <label>Loại hàng (Lot/Dami) - Cột:</label> <input type="text" id="colTypeInput" value="D" placeholder="D">
+
+                    <label>Keijo - Cột:</label> <input type="text" id="colKeijoInput" value="C" placeholder="C">
+
                     <label>Tên Lò - Cột:</label> <input type="text" id="colFurnaceInput" value="F" placeholder="F">
                     <label>Phế phẩm - Cột:</label> <input type="text" id="colScrapInput" value="J" placeholder="J">
                 </div>
@@ -549,7 +552,6 @@
             let pathNote = `ovens.${ovenName}.notes.${String(viewYear)}.${String(viewMonth).padStart(2,'0')}`;
             let noteContent = safeGet(data, pathNote) || "";
 
-            // --- CẬP NHẬT: GHI CHÚ TỰ ĐỘNG GIÃN ---
             html += `<tr>
                 <td style="font-weight:bold; background:#f9f9f9;">${ovenName}</td>
                 <td><select onchange="changeOvenTemp('${ovenName}', this.value)">
@@ -889,7 +891,7 @@
         }
     }
 
-    // --- CẬP NHẬT: TÍNH HIỆU SUẤT (PHÚT/LOT) ---
+    // --- CẬP NHẬT: TÍNH HIỆU SUẤT (NGƯỜI LÀM RÕ LOT/DAMI) ---
     function calculateFurnaceEfficiency() {
         clearErrors();
 
@@ -912,20 +914,17 @@
         let startDateTime = new Date(`${selDateVal}T${startTimeInput}`);
         let endDateTime = new Date(`${selDateVal}T${endTimeInput}`);
 
-        // Xử lý qua đêm (VD: 19:00 đến 07:00 hôm sau)
+        // Xử lý qua đêm
         if (endTimeInput <= startTimeInput) {
             endDateTime.setDate(endDateTime.getDate() + 1);
         }
 
-        // --- TÍNH TỔNG SỐ PHÚT ---
         const diffMs = endDateTime - startDateTime;
         const totalMinutes = Math.floor(diffMs / 60000);
 
-        let msg = `Đang tính toán (${totalMinutes} phút): `;
-        if(allInputData.length > 0) msg += "File IN ";
-        if(allOutputData.length > 0) msg += "File OUT";
-        showToast(msg, "info");
+        showToast(`Đang tính toán (${totalMinutes} phút)...`, "info");
 
+        // --- LẤY INDEX CÁC CỘT ---
         const getIndex = (id) => XLSX.utils.decode_col(document.getElementById(id).value.trim().toUpperCase());
         const idxDate = getIndex('colDateInput');
         const idxType = getIndex('colTypeInput');
@@ -933,7 +932,9 @@
         const idxScrap = getIndex('colScrapInput');
         const idxPerson = getIndex('colPersonInput');
         const idxProcess = getIndex('colProcessInput');
-        const headerRows = parseInt(document.getElementById('headerRowInput').value) || 0;
+
+        // [NEW] Lấy index cột Keijo
+        const idxKeijo = getIndex('colKeijoInput');
 
         let furnaceStats = {};
         let grandTotalLots = 0;
@@ -949,18 +950,11 @@
             if (d && !(d instanceof Date)) {
                 const str = String(d).trim();
                 const parts = str.split('/');
-                if (parts.length === 3) {
-                    d = new Date(parts[2], parts[1]-1, parts[0]);
-                } else {
-                    const tempD = new Date(str);
-                    if (!isNaN(tempD.getTime())) d = tempD;
-                }
+                if (parts.length === 3) d = new Date(parts[2], parts[1]-1, parts[0]);
+                else { const tempD = new Date(str); if (!isNaN(tempD.getTime())) d = tempD; }
             }
 
-            if (!d || !(d instanceof Date) || isNaN(d.getTime())) {
-                return;
-            }
-
+            if (!d || !(d instanceof Date) || isNaN(d.getTime())) return;
             if (d < startDateTime || d > endDateTime) return;
 
             const typeCode = String(row[idxType] || '').trim().toUpperCase();
@@ -968,10 +962,11 @@
             const scrapVal = parseFloat(row[idxScrap]) || 0;
             const personName = String(row[idxPerson] || 'Unknown').trim();
             const procName = String(row[idxProcess] || 'Không xác định').trim();
+            const keijoVal = String(row[idxKeijo] || '').trim();
 
             if (!furnaceStats[furnaceName]) {
                 furnaceStats[furnaceName] = {
-                    processes: {},
+                    items: {},
                     totalLots: 0,
                     totalDummies: 0,
                     totalScrap: 0,
@@ -979,20 +974,28 @@
                 };
             }
 
-            if (!furnaceStats[furnaceName].processes[procName]) {
-                furnaceStats[furnaceName].processes[procName] = { lots: 0, dummies: 0 };
+            // Group by Process + Keijo
+            const uniqueKey = procName + '|||' + keijoVal;
+
+            if (!furnaceStats[furnaceName].items[uniqueKey]) {
+                furnaceStats[furnaceName].items[uniqueKey] = {
+                    procName: procName,
+                    keijo: keijoVal,
+                    lots: 0,
+                    dummies: 0
+                };
             }
             if (!furnaceStats[furnaceName].operators[personName]) {
                 furnaceStats[furnaceName].operators[personName] = { lots: 0, dummies: 0 };
             }
 
             if (typeCode.startsWith('C')) {
-                furnaceStats[furnaceName].processes[procName].lots += 1;
+                furnaceStats[furnaceName].items[uniqueKey].lots += 1;
                 furnaceStats[furnaceName].totalLots += 1;
                 furnaceStats[furnaceName].operators[personName].lots += 1;
                 grandTotalLots += 1;
             } else if (typeCode.startsWith('D')) {
-                furnaceStats[furnaceName].processes[procName].dummies += 1;
+                furnaceStats[furnaceName].items[uniqueKey].dummies += 1;
                 furnaceStats[furnaceName].totalDummies += 1;
                 furnaceStats[furnaceName].operators[personName].dummies += 1;
                 grandTotalDummies += 1;
@@ -1004,19 +1007,21 @@
         flushErrors();
 
         if (Object.keys(furnaceStats).length === 0) {
-            container.innerHTML = '<p style="color:red; font-weight:bold; text-align:center;">Không tìm thấy dữ liệu phù hợp (kiểm tra lại Ngày/Giờ hoặc Cột).</p>';
-            showToast("Không tìm thấy dữ liệu trong khung giờ này!", "error");
+            container.innerHTML = '<p style="color:red; font-weight:bold; text-align:center;">Không tìm thấy dữ liệu phù hợp.</p>';
             return;
         }
 
+        // --- VẼ BẢNG MỚI ---
         let html = `<table class="stats-table">
             <thead>
                 <tr style="background-color: #007bff; color: white;">
                     <th>Tên Lò</th>
-                    <th style="background-color: #0056b3;">Phút/Lot</th> <th>Công Đoạn</th>
+                    <th>Công Đoạn</th>
+                    <th>Keijo</th>
                     <th>Lot (C)</th>
                     <th>Dami (D)</th>
                     <th>Phế Phẩm</th>
+                    <th style="background-color: #0056b3;">Phút/Lot</th>
                     <th>Người Thao Tác</th>
                 </tr>
             </thead>
@@ -1024,37 +1029,41 @@
 
         Object.keys(furnaceStats).sort().forEach(fName => {
             const item = furnaceStats[fName];
-            const processes = Object.keys(item.processes).sort();
-            const rowSpan = processes.length;
+            const itemKeys = Object.keys(item.items).sort();
+            const rowSpan = itemKeys.length;
 
-            // --- TÍNH PHÚT/LOT CHO LÒ ---
             let minPerLotStr = "-";
             if (item.totalLots > 0) {
-                // Công thức: Tổng số phút / Tổng số Lot (chỉ tính Lot C)
                 const val = totalMinutes / item.totalLots;
                 minPerLotStr = val.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
             }
 
+            // --- FORMAT HIỂN THỊ NGƯỜI THAO TÁC RÕ RÀNG ---
             const operatorStr = Object.entries(item.operators)
-                .map(([pName, pStats]) => `<b>${pName}</b> (Lot: ${pStats.lots}, Dami: ${pStats.dummies})`)
-                .join('<br>');
+                .map(([pName, pStats]) => `
+                    <div style="border-bottom: 1px dashed #ccc; padding: 2px 0;">
+                        <strong>${pName}</strong>:
+                        <span style="color:green">Lot ${pStats.lots}</span> |
+                        <span style="color:#666">Dami ${pStats.dummies}</span>
+                    </div>`)
+                .join('');
 
-            processes.forEach((proc, index) => {
-                const pStats = item.processes[proc];
+            itemKeys.forEach((key, index) => {
+                const pStats = item.items[key];
                 html += `<tr>`;
+
                 if (index === 0) {
                     html += `<td rowspan="${rowSpan}" class="furnace-row-header" style="vertical-align: top; color:#007bff; font-size:16px;">${fName}</td>`;
-
-                    // Thêm ô kết quả Phút/Lot
-                    html += `<td rowspan="${rowSpan}" style="vertical-align: top; font-weight:bold; color:#d63384; font-size:15px; background-color:#fff0f6;">${minPerLotStr}</td>`;
                 }
 
-                html += `<td style="font-weight:bold;">${proc}</td>
+                html += `<td style="font-weight:bold;">${pStats.procName}</td>
+                         <td style="color: #333;">${pStats.keijo}</td>
                          <td style="color: green; font-weight:bold;">${pStats.lots}</td>
                          <td style="color: #666;">${pStats.dummies}</td>`;
 
                 if (index === 0) {
                     html += `<td rowspan="${rowSpan}" style="color: red; font-weight:bold; vertical-align: top;">${item.totalScrap}</td>
+                             <td rowspan="${rowSpan}" style="vertical-align: top; font-weight:bold; color:#d63384; font-size:15px; background-color:#fff0f6;">${minPerLotStr}</td>
                              <td rowspan="${rowSpan}" style="text-align:left; vertical-align: top; font-size:13px;">${operatorStr}</td>`;
                 }
                 html += `</tr>`;
@@ -1066,7 +1075,7 @@
             <td style="color: green; font-size: 16px;">${grandTotalLots}</td>
             <td style="font-size: 16px;">${grandTotalDummies}</td>
             <td style="color: red; font-size: 16px;">${grandTotalScrap}</td>
-            <td></td>
+            <td colspan="2"></td>
         </tr>`;
 
         html += `</tbody></table>`;
