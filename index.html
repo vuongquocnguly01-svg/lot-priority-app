@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ Thống Bảo Trì & Sản Lượng</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
     <style>
         /* --- GIAO DIỆN CƠ BẢN --- */
@@ -173,7 +177,7 @@
     </div>
 
     <div class="production-section">
-        <h2>📈 PHÂN TÍCH </h2>
+        <h2>📈 PHÂN TÍCH</h2>
 
         <div style="padding: 15px; border: 1px solid var(--primary); border-radius: 8px; background: #f0f8ff;">
 
@@ -235,9 +239,7 @@
                 <div class="config-row" style="background: #fff3cd;">
                     <span>Cấu hình:</span>
                     <label>Loại hàng (Lot/Dami) - Cột:</label> <input type="text" id="colTypeInput" value="D" placeholder="D">
-
                     <label>Keijo - Cột:</label> <input type="text" id="colKeijoInput" value="C" placeholder="C">
-
                     <label>Tên Lò - Cột:</label> <input type="text" id="colFurnaceInput" value="F" placeholder="F">
                     <label>Phế phẩm - Cột:</label> <input type="text" id="colScrapInput" value="J" placeholder="J">
                 </div>
@@ -249,7 +251,7 @@
                     </div>
 
                     <div style="margin-right: 15px;">
-                        <label style="font-weight:bold; color:var(--primary); display:block; font-size:12px;">2. Chọn Ca:</label>
+                        <label style="font-weight:bold; color:var(--primary); display:block; font-size:12px;">2. Chọn Ca (để xem chi tiết lò):</label>
                         <select id="shiftSelect" style="padding: 8px; font-weight: bold;" onchange="updateShiftTimeInputs()">
                             <option value="DAY">☀ Ca Ngày</option>
                             <option value="NIGHT">🌙 Ca Đêm</option>
@@ -271,8 +273,10 @@
                 </div>
 
                 <div style="margin-top: 10px; font-size: 13px; color: #666; font-style: italic;">
-                    * 👀👀👀👀👀
+                    * Lưu ý: Bảng tổng hợp (trên) tính toàn bộ ngày. Bảng chi tiết lò (dưới) tính theo giờ bạn chọn.
                 </div>
+
+                <div id="shiftSummaryContainer" style="margin-top: 20px; margin-bottom: 30px;"></div>
 
                 <div id="dailyFurnaceContainer" style="margin-top: 20px;"></div>
             </div>
@@ -281,12 +285,9 @@
     </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
 <script>
-   const firebaseConfig = {
+    // --- FIREBASE INITIALIZATION (CHỈ 1 LẦN) ---
+    const firebaseConfig = {
      apiKey: "AIzaSyCn866gY_3OiB_VL0fUDMe3ZCdhYDRbIJ8",
      authDomain: "lot-priority-app-shared.firebaseapp.com",
      projectId: "lot-priority-app-shared",
@@ -298,7 +299,13 @@
 
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1377130413708808272/BH7cEuL4lWI6C-FfhNGnl84kgZ_LnqWn8TVIY8uuesT69PzrXuxZ60Uv4Tm1TFMW9BdC";
 
-    firebase.initializeApp(firebaseConfig);
+    // Khởi tạo Firebase
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    } else {
+        firebase.app(); // Nếu đã khởi tạo rồi thì dùng lại
+    }
+
     const auth = firebase.auth();
     const db = firebase.firestore();
 
@@ -704,7 +711,7 @@
             updatePersonSelectBox();
             showToast(`Đã tải xong ${files.length} file ${type}!`, "success");
         } catch(e) {
-            document.getElementById('excelError').innerText = "Lỗi đọc file: " + e.message;
+            document.getElementById('excelError').innerText = "Lỗi đọc file Excel: " + e.message;
             showToast("Lỗi đọc file Excel!", "error");
         }
     }
@@ -891,7 +898,91 @@
         }
     }
 
-    // --- CẬP NHẬT: TÍNH HIỆU SUẤT (NGƯỜI LÀM RÕ LOT/DAMI) ---
+    // --- HÀM MỚI: TÍNH TỔNG HỢP CA NGÀY VÀ ĐÊM ---
+    function generateShiftSummary(allData, idxDate, idxProcess, idxType, selectedDateStr) {
+        const summaryContainer = document.getElementById('shiftSummaryContainer');
+        summaryContainer.innerHTML = '';
+
+        // 1. Xác định khung giờ chuẩn cho ngày được chọn
+        const dayStart = new Date(`${selectedDateStr}T07:00:00`);
+        const dayEnd = new Date(`${selectedDateStr}T19:00:00`);
+        const nightStart = new Date(`${selectedDateStr}T19:00:00`);
+        const nightEnd = new Date(nightStart);
+        nightEnd.setDate(nightEnd.getDate() + 1);
+        nightEnd.setHours(7, 0, 0, 0);
+
+        let stats = {};
+        let totalDay = 0;
+        let totalNight = 0;
+
+        allData.forEach(row => {
+            if (!row || row.length === 0) return;
+
+            let d = row[idxDate];
+            if (d && !(d instanceof Date)) {
+                const str = String(d).trim();
+                const parts = str.split('/');
+                if (parts.length === 3) d = new Date(parts[2], parts[1]-1, parts[0]);
+                else { const tempD = new Date(str); if (!isNaN(tempD.getTime())) d = tempD; }
+            }
+            if (!d || !(d instanceof Date) || isNaN(d.getTime())) return;
+
+            // Chỉ tính "C" (Lot), bỏ qua Dami
+            const typeCode = String(row[idxType] || '').trim().toUpperCase();
+            if (!typeCode.startsWith('C')) return;
+
+            const procName = String(row[idxProcess] || 'Không xác định').trim();
+            if (!stats[procName]) stats[procName] = { day: 0, night: 0 };
+
+            if (d >= dayStart && d < dayEnd) {
+                stats[procName].day += 1;
+                totalDay += 1;
+            } else if (d >= nightStart && d < nightEnd) {
+                stats[procName].night += 1;
+                totalNight += 1;
+            }
+        });
+
+        let html = `
+        <h3 style="color: #007bff; margin-bottom: 10px;">📊 TỔNG HỢP SẢN LƯỢNG NGÀY ${selectedDateStr} (Theo Ca)</h3>
+        <table class="stats-table" style="box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <thead>
+                <tr style="background: #28a745; color: white;">
+                    <th style="text-align:left;">Công Đoạn</th>
+                    <th>☀ Ca Ngày (07:00 - 19:00)</th>
+                    <th>🌙 Ca Đêm (19:00 - 07:00 hôm sau)</th>
+                    <th style="background: #155724;">Tổng Cộng</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        const sortedProcs = Object.keys(stats).sort();
+        if (sortedProcs.length === 0) {
+            html += `<tr><td colspan="4" style="text-align:center; padding: 20px;">Không có dữ liệu Lot (C) cho ngày này</td></tr>`;
+        } else {
+            sortedProcs.forEach(proc => {
+                const item = stats[proc];
+                const subTotal = item.day + item.night;
+                html += `<tr>
+                    <td style="font-weight:bold; text-align:left;">${proc}</td>
+                    <td style="color: #007bff; font-weight:bold;">${item.day > 0 ? item.day : '-'}</td>
+                    <td style="color: #6610f2; font-weight:bold;">${item.night > 0 ? item.night : '-'}</td>
+                    <td style="font-weight:bold; background: #e9f7ef;">${subTotal}</td>
+                </tr>`;
+            });
+            html += `<tr style="background: #ffeb3b; font-weight:bold; color: #856404; border-top: 2px solid #999;">
+                <td style="text-align:right;">TỔNG TOÀN XƯỞNG:</td>
+                <td style="font-size: 15px;">${totalDay}</td>
+                <td style="font-size: 15px;">${totalNight}</td>
+                <td style="font-size: 16px; color: red;">${totalDay + totalNight}</td>
+            </tr>`;
+        }
+        html += `</tbody></table>`;
+        summaryContainer.innerHTML = html;
+        summaryContainer.style.display = 'block';
+    }
+
+    // --- CẬP NHẬT: TÍNH HIỆU SUẤT (GỌI THÊM HÀM TỔNG HỢP Ở TRÊN) ---
     function calculateFurnaceEfficiency() {
         clearErrors();
 
@@ -914,7 +1005,6 @@
         let startDateTime = new Date(`${selDateVal}T${startTimeInput}`);
         let endDateTime = new Date(`${selDateVal}T${endTimeInput}`);
 
-        // Xử lý qua đêm
         if (endTimeInput <= startTimeInput) {
             endDateTime.setDate(endDateTime.getDate() + 1);
         }
@@ -932,16 +1022,18 @@
         const idxScrap = getIndex('colScrapInput');
         const idxPerson = getIndex('colPersonInput');
         const idxProcess = getIndex('colProcessInput');
-
-        // [NEW] Lấy index cột Keijo
         const idxKeijo = getIndex('colKeijoInput');
 
+        const combinedData = [...allInputData, ...allOutputData];
+
+        // ===> GỌI HÀM TẠO BẢNG TỔNG HỢP CA NGÀY/ĐÊM <===
+        generateShiftSummary(combinedData, idxDate, idxProcess, idxType, selDateVal);
+
+        // --- PHẦN TÍNH TOÁN HIỆU SUẤT LÒ ---
         let furnaceStats = {};
         let grandTotalLots = 0;
         let grandTotalDummies = 0;
         let grandTotalScrap = 0;
-
-        const combinedData = [...allInputData, ...allOutputData];
 
         combinedData.forEach((row, i) => {
             if (!row || row.length === 0) return;
@@ -965,25 +1057,12 @@
             const keijoVal = String(row[idxKeijo] || '').trim();
 
             if (!furnaceStats[furnaceName]) {
-                furnaceStats[furnaceName] = {
-                    items: {},
-                    totalLots: 0,
-                    totalDummies: 0,
-                    totalScrap: 0,
-                    operators: {}
-                };
+                furnaceStats[furnaceName] = { items: {}, totalLots: 0, totalDummies: 0, totalScrap: 0, operators: {} };
             }
 
-            // Group by Process + Keijo
             const uniqueKey = procName + '|||' + keijoVal;
-
             if (!furnaceStats[furnaceName].items[uniqueKey]) {
-                furnaceStats[furnaceName].items[uniqueKey] = {
-                    procName: procName,
-                    keijo: keijoVal,
-                    lots: 0,
-                    dummies: 0
-                };
+                furnaceStats[furnaceName].items[uniqueKey] = { procName: procName, keijo: keijoVal, lots: 0, dummies: 0 };
             }
             if (!furnaceStats[furnaceName].operators[personName]) {
                 furnaceStats[furnaceName].operators[personName] = { lots: 0, dummies: 0 };
@@ -1007,12 +1086,12 @@
         flushErrors();
 
         if (Object.keys(furnaceStats).length === 0) {
-            container.innerHTML = '<p style="color:red; font-weight:bold; text-align:center;">Không tìm thấy dữ liệu phù hợp.</p>';
+            container.innerHTML = '<p style="color:red; font-weight:bold; text-align:center;">Không tìm thấy dữ liệu lò trong khung giờ này.</p>';
             return;
         }
 
-        // --- VẼ BẢNG MỚI ---
-        let html = `<table class="stats-table">
+        let html = `<h3 style="color: #d63384; margin-top:0;">🔥 CHI TIẾT HIỆU SUẤT LÒ (${startTimeInput} - ${endTimeInput})</h3>
+        <table class="stats-table">
             <thead>
                 <tr style="background-color: #007bff; color: white;">
                     <th>Tên Lò</th>
@@ -1038,7 +1117,6 @@
                 minPerLotStr = val.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
             }
 
-            // --- FORMAT HIỂN THỊ NGƯỜI THAO TÁC RÕ RÀNG ---
             const operatorStr = Object.entries(item.operators)
                 .map(([pName, pStats]) => `
                     <div style="border-bottom: 1px dashed #ccc; padding: 2px 0;">
@@ -1051,16 +1129,13 @@
             itemKeys.forEach((key, index) => {
                 const pStats = item.items[key];
                 html += `<tr>`;
-
                 if (index === 0) {
                     html += `<td rowspan="${rowSpan}" class="furnace-row-header" style="vertical-align: top; color:#007bff; font-size:16px;">${fName}</td>`;
                 }
-
                 html += `<td style="font-weight:bold;">${pStats.procName}</td>
                          <td style="color: #333;">${pStats.keijo}</td>
                          <td style="color: green; font-weight:bold;">${pStats.lots}</td>
                          <td style="color: #666;">${pStats.dummies}</td>`;
-
                 if (index === 0) {
                     html += `<td rowspan="${rowSpan}" style="color: red; font-weight:bold; vertical-align: top;">${item.totalScrap}</td>
                              <td rowspan="${rowSpan}" style="vertical-align: top; font-weight:bold; color:#d63384; font-size:15px; background-color:#fff0f6;">${minPerLotStr}</td>
@@ -1071,7 +1146,7 @@
         });
 
         html += `<tr class="grand-total-footer">
-            <td colspan="3" style="text-align: right;">TỔNG CỘNG:</td>
+            <td colspan="3" style="text-align: right;">TỔNG CỘNG (Khung giờ này):</td>
             <td style="color: green; font-size: 16px;">${grandTotalLots}</td>
             <td style="font-size: 16px;">${grandTotalDummies}</td>
             <td style="color: red; font-size: 16px;">${grandTotalScrap}</td>
